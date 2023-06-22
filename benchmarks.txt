@@ -48,51 +48,147 @@ JUMP          X1-BA92-74905E  X1-QP42-15657A  1->1    186s
 NAV (BURN)    X1-QP42-15657A  X1-QP42-01002A  1->0    45s
 Total duration 117766s
 
-12000
-jump: 2508 market: 1478 system: 7808 total: 11794
-num edges: 3091588
-Time elapsed: 49.4997ms
+### WINNER? ###
+
 Planned route from X1-FT59-41745B to X1-QP42-01002A under fuel constraint: 1200
-Refuel          X1-FT59-41745B
-Warp(DRIFT)     X1-FT59-41745B  ->      X1-KB16 61462s
-Warp(DRIFT)     X1-KB16 ->      X1-UH75-52104E  65442s
-Refuel          X1-UH75-52104E
-Warp(DRIFT)     X1-UH75-52104E  ->      X1-RQ65-53806D  65282s
-Jumpgate        X1-RQ65-53806D  ->      X1-RU93-23710F  172s
-Jumpgate        X1-RU93-23710F  ->      X1-YH57-81676E  158s
-Warp(DRIFT)     X1-YH57-81676E  ->      X1-HF70-25321C  31848s
-Refuel          X1-HF70-25321C
-Warp(CRUISE)    X1-HF70-25321C  ->      X1-UH35-01193E  422s
-Refuel          X1-UH35-01193E
-Warp(CRUISE)    X1-UH35-01193E  ->      X1-XC58-19213D  592s
-Refuel          X1-XC58-19213D
-Nav(BURN)       X1-XC58-19213D  ->      X1-XC58-51615Z  37s
-Jumpgate        X1-XC58-51615Z  ->      X1-GX98-17169E  76s
-Jumpgate        X1-GX98-17169E  ->      X1-XB31-71714E  200s
-Nav(BURN)       X1-XB31-71714E  ->      X1-XB31-71222C  30s
-Refuel          X1-XB31-71222C
-Warp(CRUISE)    X1-XB31-71222C  ->      X1-GT42-26683Z  702s
-Refuel          X1-GT42-26683Z
-Warp(BURN)      X1-GT42-26683Z  ->      X1-SN62-69472C  173s
-Refuel          X1-SN62-69472C
-Warp(BURN)      X1-SN62-69472C  ->      X1-MJ83-94371Z  157s
-Refuel          X1-MJ83-94371Z
-Warp(DRIFT)     X1-MJ83-94371Z  ->      X1-CH12-73311B  18855s
-Jumpgate        X1-CH12-73311B  ->      X1-AT76-34829Z  84s
-Jumpgate        X1-AT76-34829Z  ->      X1-RJ31-03057C  191s
-Jumpgate        X1-RJ31-03057C  ->      X1-AS7-28449E   85s
-Jumpgate        X1-AS7-28449E   ->      X1-GY57-10616A  178s
-Jumpgate        X1-GY57-10616A  ->      X1-FK91-62015F  133s
-Jumpgate        X1-FK91-62015F  ->      X1-AR68-29868E  161s
-Jumpgate        X1-AR68-29868E  ->      X1-GV51-04677Z  184s
-Jumpgate        X1-GV51-04677Z  ->      X1-PQ51-06628A  175s
-Jumpgate        X1-PQ51-06628A  ->      X1-DH88-03410E  60s
-Jumpgate        X1-DH88-03410E  ->      X1-CN95-55959E  185s
-Jumpgate        X1-CN95-55959E  ->      X1-HS75-13697A  82s
-Jumpgate        X1-HS75-13697A  ->      X1-GQ51-43393Z  171s
-Jumpgate        X1-GQ51-43393Z  ->      X1-SH69-69119X  175s
-Jumpgate        X1-SH69-69119X  ->      X1-G53-86926X   191s
-Jumpgate        X1-G53-86926X   ->      X1-BA92-74905E  137s
-Jumpgate        X1-BA92-74905E  ->      X1-QP42-15657A  186s
-Nav(BURN)       X1-QP42-15657A  ->      X1-QP42-01002A  45s
-Total duration: 248031s
+Warp(DRIFT)     X1-FT59-41745B  ->  X1-BM23-80711C      62422s  62422s  1       1199
+Jumpgate        X1-BM23-80711C  ->  X1-QP91-88072E      147s    62569s  0       1199
+Jumpgate        X1-QP91-88072E  ->  X1-BJ80-97313E      66s     62635s  0       1199
+Warp(DRIFT)     X1-BJ80-97313E  ->  X1-BX2-63487F       14115s  76750s  1       1198
+Jumpgate        X1-BX2-63487F   ->  X1-KF19-73312E      112s    76862s  0       1198
+Jumpgate        X1-KF19-73312E  ->  X1-BT77-13815Z      197s    77059s  0       1198
+Jumpgate        X1-BT77-13815Z  ->  X1-BS54-64287E      193s    77252s  0       1198
+Warp(DRIFT)     X1-BS54-64287E  ->  X1-UU22-31653B      19215s  96467s  1       1197
+Jumpgate        X1-UU22-31653B  ->  X1-MA71-13146E      159s    96626s  0       1197
+Jumpgate        X1-MA71-13146E  ->  X1-RU93-23710F      125s    96751s  0       1197
+Jumpgate        X1-RU93-23710F  ->  X1-JD10-00075E      162s    96913s  0       1197
+Jumpgate        X1-JD10-00075E  ->  X1-TN10-21710X      111s    97024s  0       1197
+Warp(CRUISE)    X1-TN10-21710X  ->  X1-KS92             348s    97372s  500     697
+Warp(DRIFT)     X1-KS92         ->  X1-UQ45             7168s   104540s 1       696
+Warp(CRUISE)    X1-UQ45         ->  X1-UN9-76007C       476s    105016s 691     5
+Jumpgate        X1-UN9-76007C   ->  X1-HZ26-68047D      102s    105118s 0       5
+Jumpgate        X1-HZ26-68047D  ->  X1-RP32-76984C      199s    105317s 0       5
+Jumpgate        X1-RP32-76984C  ->  X1-NR6-45910C       198s    105515s 0       5
+Jumpgate        X1-NR6-45910C   ->  X1-TF65-61714Z      95s     105610s 0       5
+Jumpgate        X1-TF65-61714Z  ->  X1-TN31-74267A      157s    105767s 0       5
+Jumpgate        X1-TN31-74267A  ->  X1-QU62-31829C      178s    105945s 0       5
+Jumpgate        X1-QU62-31829C  ->  X1-FR56-55559X      189s    106134s 0       5
+Jumpgate        X1-FR56-55559X  ->  X1-FG6-47117Z       156s    106290s 0       5
+Jumpgate        X1-FG6-47117Z   ->  X1-UA16-51310E      126s    106416s 0       5
+Jumpgate        X1-UA16-51310E  ->  X1-BR98-82818A      192s    106608s 0       5
+Jumpgate        X1-BR98-82818A  ->  X1-SY96-47988F      160s    106768s 0       5
+Nav(DRIFT)      X1-SY96-47988F  ->  X1-SY96-15537F      120s    106888s 1       4
+Refuel          X1-SY96-47988F                                                  1200
+Nav(BURN)       X1-SY96-15537F  ->  X1-SY96-47988F      20s     106908s 42      1158
+Jumpgate        X1-SY96-47988F  ->  X1-DS28-25311B      154s    107062s 0       1158
+Jumpgate        X1-DS28-25311B  ->  X1-RP76-42267B      166s    107228s 0       1158
+Jumpgate        X1-RP76-42267B  ->  X1-RS64-11997B      186s    107414s 0       1158
+Jumpgate        X1-RS64-11997B  ->  X1-BP26-76810C      149s    107563s 0       1158
+Jumpgate        X1-BP26-76810C  ->  X1-XY92-78348X      70s     107633s 0       1158
+Jumpgate        X1-XY92-78348X  ->  X1-VC32-99364C      190s    107823s 0       1158
+Jumpgate        X1-VC32-99364C  ->  X1-RJ45-44210Z      101s    107924s 0       1158
+Jumpgate        X1-RJ45-44210Z  ->  X1-BG19-94736Z      194s    108118s 0       1158
+Jumpgate        X1-BG19-94736Z  ->  X1-BV19-10941Z      197s    108315s 0       1158
+Jumpgate        X1-BV19-10941Z  ->  X1-DK36-45089Z      179s    108494s 0       1158
+Jumpgate        X1-DK36-45089Z  ->  X1-KP11-08158B      186s    108680s 0       1158
+Jumpgate        X1-KP11-08158B  ->  X1-DK44-22916X      135s    108815s 0       1158
+Jumpgate        X1-DK44-22916X  ->  X1-VP28-28534C      187s    109002s 0       1158
+Jumpgate        X1-VP28-28534C  ->  X1-FR86-39314B      60s     109062s 0       1158
+Jumpgate        X1-FR86-39314B  ->  X1-MY75-90385B      194s    109256s 0       1158
+Jumpgate        X1-MY75-90385B  ->  X1-HN12-98266X      150s    109406s 0       1158
+Jumpgate        X1-HN12-98266X  ->  X1-MK21-69011D      83s     109489s 0       1158
+Jumpgate        X1-MK21-69011D  ->  X1-QP42-15657A      154s    109643s 0       1158
+Nav(BURN)       X1-QP42-15657A  ->  X1-QP42-01002A      45s     109688s 240     918
+Refuel          X1-QP42-15657A                                                  1200
+Total duration: 109688s
+
+Planned route from X1-FT59-41745B to X1-QP42-01002A under fuel constraint: 2300
+Warp(CRUISE)    X1-FT59-41745B  ->  X1-XD90             1390s   1390s   2062    238
+Warp(DRIFT)     X1-XD90         ->  X1-AR35-04086E      55055s  56445s  1       237
+Jumpgate        X1-AR35-04086E  ->  X1-QZ79-96343A      94s     56539s  0       237
+Jumpgate        X1-QZ79-96343A  ->  X1-BU60-30137E      130s    56669s  0       237
+Jumpgate        X1-BU60-30137E  ->  X1-AJ9-65634A       199s    56868s  0       237
+Jumpgate        X1-AJ9-65634A   ->  X1-YS58-94816X      143s    57011s  0       237
+Warp(DRIFT)     X1-YS58-94816X  ->  X1-KX21-19306F      29308s  86319s  1       236
+Jumpgate        X1-KX21-19306F  ->  X1-TK60-97309E      60s     86379s  0       236
+Jumpgate        X1-TK60-97309E  ->  X1-AK18-80712B      199s    86578s  0       236
+Jumpgate        X1-AK18-80712B  ->  X1-MN25-63564A      60s     86638s  0       236
+Jumpgate        X1-MN25-63564A  ->  X1-FT95-48712C      180s    86818s  0       236
+Nav(BURN)       X1-FT95-48712C  ->  X1-FT95-56014B      38s     86856s  184     52
+Refuel          X1-FT95-48712C                                                  2300
+Warp(CRUISE)    X1-FT95-56014B  ->  X1-JA5-77551C       1030s   87886s  1523    777
+Refuel          X1-FT95-56014B                                                  2300
+Warp(BURN)      X1-JA5-77551C   ->  X1-M87-58481Z       342s    88228s  1962    338
+Refuel          X1-JA5-77551C                                                   2300
+Warp(BURN)      X1-M87-58481Z   ->  X1-XC58-51615Z      231s    88459s  1294    1006
+Jumpgate        X1-XC58-51615Z  ->  X1-GX98-17169E      76s     88535s  0       1006
+Nav(BURN)       X1-GX98-17169E  ->  X1-GX98-58638A      18s     88553s  22      984
+Refuel          X1-GX98-17169E                                                  2300
+Nav(BURN)       X1-GX98-58638A  ->  X1-GX98-17169E      18s     88571s  22      2278
+Jumpgate        X1-GX98-17169E  ->  X1-XC58-51615Z      76s     88647s  0       2278
+Jumpgate        X1-XC58-51615Z  ->  X1-UH63-55435C      189s    88836s  0       2278
+Jumpgate        X1-UH63-55435C  ->  X1-XH63-75510F      162s    88998s  0       2278
+Jumpgate        X1-XH63-75510F  ->  X1-RT13-32248D      182s    89180s  0       2278
+Jumpgate        X1-RT13-32248D  ->  X1-VR17-37688E      170s    89350s  0       2278
+Jumpgate        X1-VR17-37688E  ->  X1-DR33-62184X      187s    89537s  0       2278
+Warp(CRUISE)    X1-DR33-62184X  ->  X1-GD30-26783A      1440s   90977s  2138    140
+Jumpgate        X1-GD30-26783A  ->  X1-UV21-12428X      151s    91128s  0       140
+Jumpgate        X1-UV21-12428X  ->  X1-CP87-64111C      80s     91208s  0       140
+Jumpgate        X1-CP87-64111C  ->  X1-GX49-40611C      199s    91407s  0       140
+Jumpgate        X1-GX49-40611C  ->  X1-TY78-14612E      181s    91588s  0       140
+Jumpgate        X1-TY78-14612E  ->  X1-NP54-82277B      67s     91655s  0       140
+Jumpgate        X1-NP54-82277B  ->  X1-GZ7-83196Z       188s    91843s  0       140
+Jumpgate        X1-GZ7-83196Z   ->  X1-JT71-11776F      179s    92022s  0       140
+Jumpgate        X1-JT71-11776F  ->  X1-ZY89-54610Z      198s    92220s  0       140
+Jumpgate        X1-ZY89-54610Z  ->  X1-PG24-18005E      123s    92343s  0       140
+Jumpgate        X1-PG24-18005E  ->  X1-QD4-35611D       189s    92532s  0       140
+Jumpgate        X1-QD4-35611D   ->  X1-J63-46006D       88s     92620s  0       140
+Jumpgate        X1-J63-46006D   ->  X1-CR87-38169B      165s    92785s  0       140
+Jumpgate        X1-CR87-38169B  ->  X1-MK21-69011D      168s    92953s  0       140
+Jumpgate        X1-MK21-69011D  ->  X1-QP42-15657A      154s    93107s  0       140
+Nav(CRUISE)     X1-QP42-15657A  ->  X1-QP42-01002A      75s     93182s  120     20
+Refuel          X1-QP42-15657A                                                  2300
+Total duration: 93182s
+
+Planned route from X1-FT59 to X1-QP42-15657A under fuel constraint: 2300
+Warp(CRUISE)    X1-FT59         ->  X1-XD90             1390s   1390s   2062    238
+Warp(DRIFT)     X1-XD90         ->  X1-AR35-04086E      55055s  56445s  1       237
+Jumpgate        X1-AR35-04086E  ->  X1-QZ79-96343A      94s     56539s  0       237
+Jumpgate        X1-QZ79-96343A  ->  X1-BU60-30137E      130s    56669s  0       237
+Jumpgate        X1-BU60-30137E  ->  X1-AJ9-65634A       199s    56868s  0       237
+Jumpgate        X1-AJ9-65634A   ->  X1-YS58-94816X      143s    57011s  0       237
+Warp(DRIFT)     X1-YS58-94816X  ->  X1-KX21-19306F      29308s  86319s  1       236
+Jumpgate        X1-KX21-19306F  ->  X1-TK60-97309E      60s     86379s  0       236
+Jumpgate        X1-TK60-97309E  ->  X1-AK18-80712B      199s    86578s  0       236
+Jumpgate        X1-AK18-80712B  ->  X1-MN25-63564A      60s     86638s  0       236
+Jumpgate        X1-MN25-63564A  ->  X1-FT95-48712C      180s    86818s  0       236
+Nav(BURN)       X1-FT95-48712C  ->  X1-FT95-56014B      38s     86856s  184     52
+Refuel          X1-FT95-48712C                                                  2300
+Warp(CRUISE)    X1-FT95-56014B  ->  X1-JA5-77551C       1030s   87886s  1523    777
+Refuel          X1-FT95-56014B                                                  2300
+Warp(BURN)      X1-JA5-77551C   ->  X1-M87-58481Z       342s    88228s  1962    338
+Refuel          X1-JA5-77551C                                                   2300
+Warp(BURN)      X1-M87-58481Z   ->  X1-XC58-19213D      231s    88459s  1294    1006
+Refuel          X1-M87-58481Z                                                   2300
+Nav(CRUISE)     X1-XC58-19213D  ->  X1-XC58-51615Z      59s     88518s  88      2212
+Jumpgate        X1-XC58-51615Z  ->  X1-UH63-55435C      189s    88707s  0       2212
+Jumpgate        X1-UH63-55435C  ->  X1-XH63-75510F      162s    88869s  0       2212
+Jumpgate        X1-XH63-75510F  ->  X1-RT13-32248D      182s    89051s  0       2212
+Jumpgate        X1-RT13-32248D  ->  X1-VR17-37688E      170s    89221s  0       2212
+Jumpgate        X1-VR17-37688E  ->  X1-DR33-62184X      187s    89408s  0       2212
+Warp(CRUISE)    X1-DR33-62184X  ->  X1-GD30-26783A      1440s   90848s  2138    74
+Jumpgate        X1-GD30-26783A  ->  X1-UV21-12428X      151s    90999s  0       74
+Jumpgate        X1-UV21-12428X  ->  X1-CP87-64111C      80s     91079s  0       74
+Jumpgate        X1-CP87-64111C  ->  X1-GX49-40611C      199s    91278s  0       74
+Jumpgate        X1-GX49-40611C  ->  X1-TY78-14612E      181s    91459s  0       74
+Jumpgate        X1-TY78-14612E  ->  X1-NP54-82277B      67s     91526s  0       74
+Jumpgate        X1-NP54-82277B  ->  X1-GZ7-83196Z       188s    91714s  0       74
+Jumpgate        X1-GZ7-83196Z   ->  X1-JT71-11776F      179s    91893s  0       74
+Jumpgate        X1-JT71-11776F  ->  X1-ZY89-54610Z      198s    92091s  0       74
+Jumpgate        X1-ZY89-54610Z  ->  X1-PG24-18005E      123s    92214s  0       74
+Jumpgate        X1-PG24-18005E  ->  X1-QD4-35611D       189s    92403s  0       74
+Jumpgate        X1-QD4-35611D   ->  X1-J63-46006D       88s     92491s  0       74
+Jumpgate        X1-J63-46006D   ->  X1-CR87-38169B      165s    92656s  0       74
+Jumpgate        X1-CR87-38169B  ->  X1-MK21-69011D      168s    92824s  0       74
+Jumpgate        X1-MK21-69011D  ->  X1-QP42-15657A      154s    92978s  0       74
+Total duration: 92978s
