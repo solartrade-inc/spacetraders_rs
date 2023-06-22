@@ -1,0 +1,12 @@
+Planned route from X1-CX76-69886Z to X1-XH63-75510F under fuel constraint: 1200
+Jumpgate        X1-CX76-69886Z  ->      X1-FT95-48712C  172s
+Warp(DRIFT)     X1-FT95-48712C  ->      X1-JA5-77551C   10168s
+Refuel          X1-JA5-77551C
+Warp(CRUISE)    X1-JA5-77551C   ->      X1-M87-58481Z   669s
+Refuel          X1-M87-58481Z
+Warp(CRUISE)    X1-M87-58481Z   ->      X1-XC58-19213D  446s
+Refuel          X1-XC58-19213D
+Nav(BURN)       X1-XC58-19213D  ->      X1-XC58-51615Z  37s
+Jumpgate        X1-XC58-51615Z  ->      X1-UH63-55435C  189s
+Jumpgate        X1-UH63-55435C  ->      X1-XH63-75510F  162s
+Total duration: 11843s
