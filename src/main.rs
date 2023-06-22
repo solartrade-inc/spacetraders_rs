@@ -257,11 +257,13 @@ fn L2(charted_systems: &Vec<System>) {
         .unwrap();
 
     let start = Instant::now();
-    let result = astar::<usize, i32, _, _, _, _>(
-        &src,
-        |&n| l2_adj[n].iter().map(|&(e, _, w, _f)| (e, w)),
+    let result = astar::<(usize, i32), i32, _, _, _, _>(
+        &(src, MAX_FUEL),
+        |&n| l2_adj[n.0].iter().filter_map(|&(e, _, w, f)| if n.1-f>=0 {
+            Some(((e, n.1-f), w))
+        } else { None }),
         |_| 0,
-        |&n| n == dest,
+        |&n| n.0 == dest,
     );
     let duration = start.elapsed();
     println!("Time elapsed: {:?}", duration);
