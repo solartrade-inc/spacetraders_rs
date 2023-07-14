@@ -18,19 +18,18 @@ impl Client {
     pub fn new() -> Self {
         let https = hyper_tls::HttpsConnector::new();
         let client = hyper::Client::builder().build::<_, hyper::Body>(https);
-
         let db_pool = {
             let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
             let manager = AsyncDieselConnectionManager::new(&database_url);
             Pool::builder(manager).max_size(2).build().unwrap()
         };
-
         Self {
             inner: client,
             db: db_pool,
         }
     }
 
+    /// Register a new agent with the SpaceTraders API, and store the token in the database.
     pub async fn register(&self, callsign: &str, faction: &str) {
         let uri: Uri = "https://api.spacetraders.io/v2/register".parse().unwrap();
         let payload = json! ({
@@ -52,7 +51,8 @@ impl Client {
         }
 
         let json: serde_json::Value = serde_json::from_str(body).unwrap();
-        let token = json["token"].as_str().unwrap();
+        let token = json["data"]["token"].as_str().unwrap();
+        let agent = &json["data"]["agent"];
         info!("Token: {}", token);
 
         let mut conn = self.db.get().await.unwrap();
@@ -60,7 +60,7 @@ impl Client {
             .values((
                 agents::symbol.eq(callsign),
                 agents::bearer_token.eq(token),
-                agents::agent.eq(&json!({})),
+                agents::agent.eq(agent),
                 agents::created_at.eq(diesel::dsl::now),
                 agents::updated_at.eq(diesel::dsl::now),
             ))

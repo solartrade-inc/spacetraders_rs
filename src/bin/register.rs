@@ -10,5 +10,5 @@ async fn main() {
     info!("Starting up");
 
     let client = Client::new();
-    client.register("TESTTESTTEST", "UNITED").await;
+    client.register("SOLARTRADE_INC", "UNITED").await;
 }
