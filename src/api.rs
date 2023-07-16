@@ -10,8 +10,8 @@ use serde_json::json;
 use std::env;
 
 pub struct Client {
-    inner: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
     db: Pool<AsyncPgConnection>,
+    inner: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
 }
 
 impl Client {

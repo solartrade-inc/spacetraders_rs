@@ -16,3 +16,4 @@ diesel = { version = "2.1", features = ["postgres", "serde_json"] }
 diesel-async = { version = "0.3", features = ["postgres", "deadpool"] }
 dotenvy = "0.15"
 chrono = "0.4.26"
+graph_builder = "0.3.1"

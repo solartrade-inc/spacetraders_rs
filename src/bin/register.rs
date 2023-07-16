@@ -7,8 +7,8 @@ use spacetraders_rs::api::Client;
 async fn main() {
     dotenv().ok();
     pretty_env_logger::init();
-    info!("Starting up");
-
+    info!("Starting up...");
     let client = Client::new();
+
     client.register("SOLARTRADE_INC", "UNITED").await;
 }
