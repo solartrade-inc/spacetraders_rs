@@ -11,8 +11,8 @@ use hyper::body::to_bytes;
 use hyper::{Body, Uri};
 use log::error;
 use log::{debug, info};
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 
 pub struct ControllerBuilder {
     callsign: String,
@@ -213,7 +213,9 @@ impl<'a> ShipController<'a> {
         let uri: Uri = format!(
             "https://api.spacetraders.io/v2/my/ships/{}/{}",
             self.symbol, order
-        ).parse().unwrap();
+        )
+        .parse()
+        .unwrap();
         let req = hyper::Request::post(&uri)
             .header(
                 "Authorization",
@@ -223,7 +225,7 @@ impl<'a> ShipController<'a> {
             .body(Body::empty())
             .unwrap();
         let res = self.par.client.inner.request(req).await.unwrap();
-        let status = res.status();        
+        let status = res.status();
         let mut body: Value = {
             let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
             let body = std::str::from_utf8(&body_bytes).unwrap();
@@ -249,7 +251,9 @@ impl<'a> ShipController<'a> {
         let uri: Uri = format!(
             "https://api.spacetraders.io/v2/my/ships/{}/navigate",
             self.symbol
-        ).parse().unwrap();
+        )
+        .parse()
+        .unwrap();
         let payload = json! ({
             "waypointSymbol": target,
         });
@@ -271,14 +275,13 @@ impl<'a> ShipController<'a> {
         };
         assert_eq!(status, 200);
 
-
         let nav: ShipNav = serde_json::from_value(body["data"]["nav"].clone()).unwrap();
         let fuel: ShipFuel = serde_json::from_value(body["data"]["fuel"].clone()).unwrap();
         ship.nav = nav;
         ship.fuel = fuel;
 
         let duration = (ship.nav.route.arrival - Utc::now()).to_std().unwrap();
-        debug!("Sleeping for {}s", duration.as_millis() as f64 /1000.0);
+        debug!("Sleeping for {}s", duration.as_millis() as f64 / 1000.0);
         tokio::time::sleep(duration).await;
     }
 
@@ -286,9 +289,10 @@ impl<'a> ShipController<'a> {
         let ship = self.par.ships.get(&self.symbol).unwrap();
         let uri: Uri = format!(
             "https://api.spacetraders.io/v2/systems/{}/waypoints/{}/market",
-            ship.nav.system_symbol,
-            ship.nav.waypoint_symbol
-        ).parse().unwrap();
+            ship.nav.system_symbol, ship.nav.waypoint_symbol
+        )
+        .parse()
+        .unwrap();
         let req = hyper::Request::get(uri)
             .header(
                 "Authorization",
@@ -303,7 +307,9 @@ impl<'a> ShipController<'a> {
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body = std::str::from_utf8(&body_bytes).unwrap();
         let market: Data<Market> = serde_json::from_str(body).unwrap();
-        self.par.markets.insert(market.data.symbol.clone(), market.data);        
+        self.par
+            .markets
+            .insert(market.data.symbol.clone(), market.data);
     }
 
     pub async fn refuel(&mut self) {
@@ -318,7 +324,9 @@ impl<'a> ShipController<'a> {
         let uri: Uri = format!(
             "https://api.spacetraders.io/v2/my/ships/{}/refuel",
             self.symbol
-        ).parse().unwrap();
+        )
+        .parse()
+        .unwrap();
         let payload = json! ({
             "units": 100 * refuel_units,
         });

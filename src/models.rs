@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime, DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -86,7 +86,6 @@ pub struct ShipNavRoute {
     pub arrival: DateTime<Utc>,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Waypoint {
     pub symbol: String,
@@ -101,7 +100,6 @@ pub struct Waypoint {
     // chart
 }
 
-
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Market {
     pub symbol: String,
@@ -109,7 +107,6 @@ pub struct Market {
     pub imports: Vec<Symbol>,
     pub exchange: Vec<Symbol>,
     // transactions
-
     #[serde(rename = "tradeGoods")]
     pub trade_goods: Vec<MarketTradeGood>,
 }

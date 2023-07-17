@@ -36,7 +36,7 @@ async fn main() {
             ship_controller.navigate(&waypoint.symbol).await;
             ship_controller.fetch_market().await;
             ship_controller.refuel().await;
-            
+
             let market = controller.markets.get(&waypoint.symbol).unwrap();
             debug!("Market: {:?}", market);
         }
