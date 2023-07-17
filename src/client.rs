@@ -23,7 +23,7 @@ impl Client {
         let client = hyper::Client::builder().build::<_, hyper::Body>(https);
         let db_pool = {
             let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-            let manager = AsyncDieselConnectionManager::new(&database_url);
+            let manager = AsyncDieselConnectionManager::new(database_url);
             Pool::builder(manager).max_size(2).build().unwrap()
         };
         Self {

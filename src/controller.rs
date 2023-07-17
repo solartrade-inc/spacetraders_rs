@@ -1,11 +1,11 @@
 use core::panic;
 use std::collections::HashMap;
-use std::str::from_utf8;
+
 
 use crate::client::Client;
 use crate::db_models;
 use crate::models::*;
-use chrono::DateTime;
+
 use chrono::Utc;
 use hyper::body::to_bytes;
 use hyper::{Body, Uri};
@@ -46,7 +46,7 @@ impl Controller {
     }
 
     pub async fn fetch_agent(&mut self) {
-        let uri: Uri = format!("https://api.spacetraders.io/v2/my/agent")
+        let uri: Uri = "https://api.spacetraders.io/v2/my/agent".to_string()
             .parse()
             .unwrap();
         let req = hyper::Request::get(uri)
@@ -313,7 +313,7 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn refuel(&mut self) {
-        let mut ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         let refuel_units = (ship.fuel.capacity - ship.fuel.current) / 100;
         if refuel_units == 0 {
             return;

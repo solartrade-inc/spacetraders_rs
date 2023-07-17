@@ -47,7 +47,9 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64) ->
     let neighbours = graph.out_neighbors_with_values(x).collect::<Vec<_>>();
     let edge_type = neighbours[0].value.edge_type;
 
-    let ret = match edge_type {
+    
+    // println!("step({}, {}) = {:?}", x, x0, ret);
+    match edge_type {
         EdgeType::Decision => {
             let mut max = (f64::MIN, f64::MIN);
             for &t in neighbours.iter() {
@@ -85,9 +87,7 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64) ->
             }
             (sum.0 / weight_sum, sum.1 / weight_sum)
         }
-    };
-    // println!("step({}, {}) = {:?}", x, x0, ret);
-    ret
+    }
 }
 
 fn evaluate(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>) {
@@ -113,7 +113,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        let result = evaluate(&graph);
+        evaluate(&graph);
     }
 
     #[test]
@@ -129,7 +129,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        let result = evaluate(&graph);
+        evaluate(&graph);
     }
 
     #[test]
@@ -146,7 +146,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        let result = evaluate(&graph);
+        evaluate(&graph);
     }
 
     #[test]
@@ -160,6 +160,6 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        let result = evaluate(&graph);
+        evaluate(&graph);
     }
 }
