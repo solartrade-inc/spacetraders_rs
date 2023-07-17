@@ -1,5 +1,8 @@
+use crate::db_models::Agent;
 use crate::diesel::ExpressionMethods;
+use crate::diesel::OptionalExtension as _;
 use crate::schema::*;
+use diesel::QueryDsl as _;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::AsyncPgConnection;
@@ -10,8 +13,8 @@ use serde_json::json;
 use std::env;
 
 pub struct Client {
-    db: Pool<AsyncPgConnection>,
-    inner: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
+    pub db: Pool<AsyncPgConnection>,
+    pub inner: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
 }
 
 impl Client {
@@ -67,5 +70,23 @@ impl Client {
             .execute(&mut conn)
             .await
             .unwrap();
+    }
+
+    pub async fn load_agent(&self, callsign: &str) -> Agent {
+        let mut conn = self.db.get().await.unwrap();
+        let agent: Option<Agent> = agents::table
+            .select((
+                agents::symbol,
+                agents::bearer_token,
+                agents::agent,
+                agents::created_at,
+                agents::updated_at,
+            ))
+            .filter(agents::symbol.eq(callsign))
+            .first(&mut conn)
+            .await
+            .optional()
+            .unwrap();
+        agent.unwrap()
     }
 }

@@ -1,38 +1,44 @@
 use dotenvy::dotenv;
 use log::*;
 
-use spacetraders_rs::api::Client as Controller;
+use spacetraders_rs::{controller::Controller, util};
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
     pretty_env_logger::init();
     info!("Starting up...");
-    let client = Controller::new();
 
     // load agent (set bearer token)
-    let agent = client.load_callsign("SOLARTRADE_INC").await;
+    let mut controller = Controller::new("ASYNC_KING").load().await;
 
     // refetch agent
-    client.fetch_agent().await;
+    controller.fetch_agent().await;
     // refetch contracts
-    client.fetch_contracts().await;
+    controller.fetch_contracts(1, 20).await;
     // refetch ships
-    client.fetch_ships().await;
+    controller.fetch_ships(1, 20).await;
 
     // grab our command frigate, and send it to all the marketplaces in the starting system
-    let ship = client.ships.get(0).controller(); // (clones internals to some degree)
-    ship.flight_mode('CRUISE').await;
+    let mut ship_controller = controller.ship_controller(1);
+    ship_controller.flight_mode("CRUISE").await;
 
-    client.fetch_system(ship.location).await;
-    let system = client.systems.get(ship.location).unwrap();
+    let ship_system = ship_controller.ship().nav.system_symbol.clone();
+    let waypoints = controller.fetch_system_waypoints(&ship_system).await;
+    // let system = client.systems.get(ship.location).unwrap();
 
-    for waypoint in system.waypoints.iter() {
-        if waypoint.is_market() {
+    debug!("Waypoints: {:?}", waypoints);
+
+    for waypoint in waypoints.iter() {
+        if util::is_market(waypoint) {
             debug!("Navigating to {}", waypoint.symbol);
-            ship.navigate_to(waypoint.symbol).await;
-            ship.fetch_market().await;
-            ship.refuel().await;
+            let mut ship_controller = controller.ship_controller(1);
+            ship_controller.navigate(&waypoint.symbol).await;
+            ship_controller.fetch_market().await;
+            ship_controller.refuel().await;
+            
+            let market = controller.markets.get(&waypoint.symbol).unwrap();
+            debug!("Market: {:?}", market);
         }
     }
 
