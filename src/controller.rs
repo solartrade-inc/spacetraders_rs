@@ -1,7 +1,6 @@
 use core::panic;
 use std::collections::HashMap;
 
-
 use crate::client::Client;
 use crate::db_models;
 use crate::models::*;
@@ -46,7 +45,8 @@ impl Controller {
     }
 
     pub async fn fetch_agent(&mut self) {
-        let uri: Uri = "https://api.spacetraders.io/v2/my/agent".to_string()
+        let uri: Uri = "https://api.spacetraders.io/v2/my/agent"
+            .to_string()
             .parse()
             .unwrap();
         let req = hyper::Request::get(uri)

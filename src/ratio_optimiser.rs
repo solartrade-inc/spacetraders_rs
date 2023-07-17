@@ -47,7 +47,6 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64) ->
     let neighbours = graph.out_neighbors_with_values(x).collect::<Vec<_>>();
     let edge_type = neighbours[0].value.edge_type;
 
-    
     // println!("step({}, {}) = {:?}", x, x0, ret);
     match edge_type {
         EdgeType::Decision => {
