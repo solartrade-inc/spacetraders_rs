@@ -10,7 +10,7 @@ async fn main() {
     info!("Starting up...");
 
     // load agent (set bearer token)
-    let mut controller = Controller::new("ASYNC_KING").load().await;
+    let mut controller = Controller::new("KUCKUCKSHEIM").load().await;
 
     // refetch agent
     controller.fetch_agent().await;

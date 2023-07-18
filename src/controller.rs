@@ -1,15 +1,15 @@
 use core::panic;
 use std::collections::HashMap;
 
-use crate::client::Client;
+use crate::api_client::ApiClient;
+use crate::database::DatabaseClient;
 use crate::db_models;
 use crate::models::*;
 
 use chrono::Utc;
 use hyper::body::to_bytes;
 use hyper::{Body, Uri};
-use log::error;
-use log::{debug, info};
+use log::{debug, error, info};
 use serde_json::json;
 use serde_json::Value;
 
@@ -18,11 +18,16 @@ pub struct ControllerBuilder {
 }
 impl ControllerBuilder {
     pub async fn load(&self) -> Controller {
-        let client = Client::new();
-        let agent = client.load_agent(&self.callsign).await;
+        let mut api_client = ApiClient::new();
+        let db_client = DatabaseClient::new();
+        let agent = db_client.load_agent(&self.callsign).await;
         // let ships = vec![]; // client.load_ships(&agent.symbol).await;
+
+        api_client.auth_token = Some(agent.bearer_token.clone());
+
         Controller {
-            client,
+            api_client,
+            db_client,
             agent,
             ships: HashMap::new(),
             markets: HashMap::new(),
@@ -31,7 +36,8 @@ impl ControllerBuilder {
 }
 
 pub struct Controller {
-    client: Client,
+    api_client: ApiClient,
+    db_client: DatabaseClient,
     ships: HashMap<String, Ship>,
     pub markets: HashMap<String, Market>,
     agent: db_models::Agent,
@@ -57,7 +63,7 @@ impl Controller {
             )
             .body(Body::empty())
             .unwrap();
-        let res = self.client.inner.request(req).await.unwrap();
+        let res = self.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -79,7 +85,7 @@ impl Controller {
             )
             .body(Body::empty())
             .unwrap();
-        let res = self.client.inner.request(req).await.unwrap();
+        let res = self.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -101,7 +107,7 @@ impl Controller {
             )
             .body(Body::empty())
             .unwrap();
-        let res = self.client.inner.request(req).await.unwrap();
+        let res = self.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -131,7 +137,7 @@ impl Controller {
             )
             .body(Body::empty())
             .unwrap();
-        let res = self.client.inner.request(req).await.unwrap();
+        let res = self.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -190,7 +196,7 @@ impl<'a> ShipController<'a> {
             )
             .body(hyper::Body::from(payload.to_string()))
             .unwrap();
-        let res = self.par.client.inner.request(req).await.unwrap();
+        let res = self.par.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -224,7 +230,7 @@ impl<'a> ShipController<'a> {
             .header("Content-Length", "0")
             .body(Body::empty())
             .unwrap();
-        let res = self.par.client.inner.request(req).await.unwrap();
+        let res = self.par.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         let mut body: Value = {
             let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -265,7 +271,7 @@ impl<'a> ShipController<'a> {
             )
             .body(hyper::Body::from(payload.to_string()))
             .unwrap();
-        let res = self.par.client.inner.request(req).await.unwrap();
+        let res = self.par.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         let body: Value = {
             let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
@@ -285,31 +291,21 @@ impl<'a> ShipController<'a> {
         tokio::time::sleep(duration).await;
     }
 
-    pub async fn fetch_market(&mut self) {
+    pub async fn fetch_market(&mut self) -> Market {
         let ship = self.par.ships.get(&self.symbol).unwrap();
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/systems/{}/waypoints/{}/market",
-            ship.nav.system_symbol, ship.nav.waypoint_symbol
-        )
-        .parse()
-        .unwrap();
-        let req = hyper::Request::get(uri)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.par.agent.bearer_token),
-            )
-            .body(Body::empty())
-            .unwrap();
-        let res = self.par.client.inner.request(req).await.unwrap();
-        let status = res.status();
-        assert_eq!(status, 200);
-
-        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body = std::str::from_utf8(&body_bytes).unwrap();
-        let market: Data<Market> = serde_json::from_str(body).unwrap();
+        // fetch
+        let market = self
+            .par
+            .api_client
+            .fetch_market(&ship.nav.system_symbol, &ship.nav.waypoint_symbol)
+            .await;
+        // update memory
         self.par
             .markets
-            .insert(market.data.symbol.clone(), market.data);
+            .insert(market.symbol.clone(), market.clone());
+        // update database
+        self.par.db_client.upsert_market(&market).await;
+        market
     }
 
     pub async fn refuel(&mut self) {
@@ -338,7 +334,7 @@ impl<'a> ShipController<'a> {
             )
             .body(hyper::Body::from(payload.to_string()))
             .unwrap();
-        let res = self.par.client.inner.request(req).await.unwrap();
+        let res = self.par.api_client.inner.request(req).await.unwrap();
         let status = res.status();
         let body = {
             let body = to_bytes(res.into_body()).await.unwrap();
