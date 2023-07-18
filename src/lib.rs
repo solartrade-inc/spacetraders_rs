@@ -1,13 +1,19 @@
 #[macro_use]
 extern crate diesel;
 
-// pub mod client;
+// interfaces
 pub mod api_client;
 pub mod database;
 
-pub mod controller;
+// models
 pub mod db_models;
 pub mod models;
-pub mod ratio_optimiser;
 pub mod schema;
+
+// logic
+pub mod controller;
+pub mod mining;
+
+// tools
+pub mod decision_tree;
 pub mod util;

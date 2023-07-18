@@ -9,6 +9,8 @@ use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::AsyncPgConnection;
 use diesel_async::RunQueryDsl as _;
 
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use std::env;
 
@@ -78,5 +80,31 @@ impl DatabaseClient {
             .execute(&mut conn)
             .await
             .unwrap();
+    }
+
+    pub async fn load_market(&self, symbol: &str) -> Market {
+        #[derive(Serialize, Deserialize, QueryableByName, Queryable, Debug, Clone)]
+        #[diesel(table_name = markets)]
+        struct ResultRow {
+            symbol: String,
+            market: Value,
+            createdAt: chrono::NaiveDateTime,
+            updatedAt: chrono::NaiveDateTime,
+        }
+
+        let mut conn = self.db.get().await.unwrap();
+        let row: Option<ResultRow> = markets::table
+            .select((
+                markets::symbol,
+                markets::market,
+                markets::createdAt,
+                markets::updatedAt,
+            ))
+            .filter(markets::symbol.eq(symbol))
+            .first(&mut conn)
+            .await
+            .optional()
+            .unwrap();
+        serde_json::from_value(row.unwrap().market).unwrap()
     }
 }

@@ -36,11 +36,11 @@ impl ControllerBuilder {
 }
 
 pub struct Controller {
-    api_client: ApiClient,
-    db_client: DatabaseClient,
-    ships: HashMap<String, Ship>,
+    pub api_client: ApiClient,
+    pub db_client: DatabaseClient,
+    pub ships: HashMap<String, Ship>,
     pub markets: HashMap<String, Market>,
-    agent: db_models::Agent,
+    pub agent: db_models::Agent,
 }
 
 impl Controller {

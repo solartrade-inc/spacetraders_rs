@@ -1552,6 +1552,7 @@ dependencies = [
  "graph_builder",
  "hyper",
  "hyper-tls",
+ "lazy_static",
  "log",
  "pathfinding",
  "pretty_env_logger",
