@@ -15,10 +15,11 @@ async fn main() {
 
     // refetch agent + ships
     controller.fetch_agent().await;
+    controller.fetch_contracts(1, 20).await;
     controller.fetch_ships(1, 20).await;
 
     // control our command frigate
-    let mut ship_controller = controller.ship_controller(1);
+    let mut ship_controller = controller.ship_controller(3);
     ship_controller.flight_mode("CRUISE").await;
 
     let ship_system = ship_controller.ship().nav.system_symbol.clone();
@@ -30,7 +31,7 @@ async fn main() {
     // call into mining module
     let mut mining_controller = MiningController {
         par: controller,
-        ship_idx: 1,
+        ship_idx: 3,
         asteroid_symbol: asteroid.symbol.clone(),
     };
     mining_controller.run().await;

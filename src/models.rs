@@ -32,9 +32,26 @@ pub struct Ship {
     pub nav: ShipNav,
     // pub crew
     // pub frame
-    // pub reactor, engine, modules, mounts
+    // pub reactor, engine, modules
+    pub mounts: Vec<ShipMount>,
     pub cargo: ShipCargo,
     pub fuel: ShipFuel,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct ShipMount {
+    pub symbol: String,
+    // name ,descr,
+    pub strength: Option<u32>,
+    pub deposits: Option<Vec<String>>,
+    pub requirements: ShipMountRequirements,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct ShipMountRequirements {
+    pub power: i32,
+    pub crew: i32,
+    pub slots: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]

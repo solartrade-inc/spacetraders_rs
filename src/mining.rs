@@ -6,6 +6,8 @@ use crate::{api_client::ApiClient, controller::Controller, database::DatabaseCli
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use lazy_static::lazy_static;
 use log::debug;
+use rand::Rng;
+use rand::prelude::*;
 
 pub struct MiningController {
     pub par: Controller,
@@ -52,13 +54,7 @@ impl MiningController {
         debug!("Asteroid: {:?}", asteroid_waypoint.traits);
         debug!("Markets: {:?}", markets);
 
-        // 3. construct decision tree based on:
-        //  - asteroid traits
-        //  - ship mining lasers mounts
-        //  - ship survey mounts
-        //  - ship cargo capacity
-        //  - market prices
-        // 4. calculate expected rate
+        // construct decision tree based on:
 
         let mut edges: Vec<(String, String, Edge<Metric>)> = vec![];
 
@@ -72,8 +68,28 @@ impl MiningController {
 
         debug!("Deposits: {:?}", deposits);
 
-        const MINING_LASER_YIELD: f64 = 15.0;
-        const MINING_COOLDOWN: f64 = 70.0;
+        let mut surveyor_cooldown: f64 = 60.0;
+        let mut surveyors: Vec<_> = vec![];
+        let mut extract_cooldown: f64 = 60.0;
+        let mut mining_strength: f64 = 0.0;
+        for mount in ship.mounts {
+            if mount.symbol.starts_with("MOUNT_MINING_LASER_") {
+                extract_cooldown += 10.0 * mount.requirements.power as f64;
+                mining_strength += mount.strength.unwrap() as f64;
+            }
+            if mount.symbol.starts_with("MOUNT_SURVEYOR_") {
+                surveyor_cooldown += 10.0 * mount.requirements.power as f64;
+                let survey_deposits = mount.deposits.unwrap();
+                // calculate intersection of deposits and survey_deposits
+                let mut intersection: Vec<String> = Vec::new();
+                for (&symbol, &_weight) in deposits.iter() {
+                    if survey_deposits.contains(&symbol.to_string()) {
+                        intersection.push(symbol.to_string());
+                    }
+                }
+                surveyors.push((mount.strength.unwrap(), intersection));
+            }
+        }
 
         edges.push((
             "start".into(),
@@ -86,7 +102,7 @@ impl MiningController {
             edges.push((
                 "extract".into(),
                 node,
-                Edge::new_probability(Metric(0.0, MINING_COOLDOWN), weight as f64),
+                Edge::new_probability(Metric(0.0, extract_cooldown), weight as f64),
             ));
         }
         // sell + jettison edges
@@ -108,10 +124,10 @@ impl MiningController {
                     .map(|g| g.sell_price);
                 if let Some(unit_sell_price) = sell_price {
                     let mut duration = 0.0;
-                    let mut profit = unit_sell_price as f64 * MINING_LASER_YIELD;
+                    let mut profit = unit_sell_price as f64 * mining_strength;
                     if market.symbol != asteroid_market.symbol {
-                        duration += 0.0; // crude estimate of travel and return time
-                        profit -= 0.0; // crude estimate of fuel cost
+                        duration += 10.0; // crude estimate of travel and return time
+                        profit -= 50.0; // crude estimate of fuel cost
                     }
                     edges.push((
                         cargo_node.clone(),
@@ -119,6 +135,65 @@ impl MiningController {
                         Edge::new_decision(Metric(profit, duration)),
                     ));
                 }
+            }
+        }
+
+        // survey edges
+        edges.push((
+            "start".into(),
+            "survey".into(),
+            Edge::new_decision(Metric(0.0, 1.0)),
+        ));
+
+        // for the probability edges, there are too many combinations to fully enumerate,
+        // so we'll generate a sample of 10k, and that should be good enough to accurately calculate rate,
+        // and therefore gives us a decision model for the surveys that we didn't explicitly enumerate
+
+        let mut sample_surveys = vec![];
+        loop {
+            for (strength, deposits) in surveyors.iter() {
+                for _ in 0..*strength {
+                    let num_deposits = rand::thread_rng().gen_range(3..=7);
+                    let mut survey = vec![];
+                    for _ in 0..num_deposits {
+                        let deposit = deposits
+                            .choose_weighted(&mut rand::thread_rng(), |symbol| YIELD_WEIGHTS[symbol.as_str()])
+                            .unwrap();
+                        survey.push(deposit.clone());
+                    }
+                    sample_surveys.push(survey);
+                }
+            }
+
+            if sample_surveys.len() >= 10_000 {
+                break;
+            }
+        }
+
+        for (survey_idx, survey) in sample_surveys.iter().enumerate() {
+            let survey_node = format!("survey_{}", survey_idx);
+            let extract_survey_node = format!("extract_survey_{}", survey_idx);
+            edges.push((
+                "survey".into(),
+                survey_node.clone(),
+                Edge::new_probability(Metric(0.0, surveyor_cooldown), 1.0),
+            ));
+            edges.push((
+                survey_node.clone(),
+                "finish".into(),
+                Edge::new_decision(Metric(0.0, 0.0)),
+            ));
+            edges.push((
+                survey_node.clone(),
+                extract_survey_node.clone(),
+                Edge::new_decision(Metric(0.0, 0.0)),
+            ));
+            for deposit in survey.iter() {
+                edges.push((
+                    extract_survey_node.clone(),
+                    format!("cargo_{}", deposit),
+                    Edge::new_probability(Metric(0.0, extract_cooldown), 1.0),
+                ));
             }
         }
 
@@ -157,14 +232,14 @@ fn asteroid_yields(traits: &Vec<String>) -> HashMap<&'static str, usize> {
     }
     let mut m = HashMap::new();
     for &symbol in s.iter() {
-        let weight = TRAIT_YIELD_WEIGHTS.get(symbol).unwrap();
+        let weight = YIELD_WEIGHTS.get(symbol).unwrap();
         m.insert(symbol, *weight);
     }
     m
 }
 
 lazy_static::lazy_static! {
-    static ref TRAIT_YIELD_WEIGHTS: HashMap<&'static str, usize> = {
+    static ref YIELD_WEIGHTS: HashMap<&'static str, usize> = {
         let m = HashMap::from([
             ("ICE_WATER", 200),
 
