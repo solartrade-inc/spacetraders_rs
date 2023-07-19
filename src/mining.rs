@@ -25,6 +25,10 @@ impl MiningController {
     }
 
     pub async fn run(&mut self) {
+        let _g = self.prep().await;
+    }
+
+    pub async fn prep(&mut self) -> () {
         // 0. load ship
         let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
         let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
@@ -90,6 +94,7 @@ impl MiningController {
                 surveyors.push((mount.strength.unwrap(), intersection));
             }
         }
+        let surveys_per_operation = surveyors.iter().map(|(s, _)| *s).sum::<u32>();
 
         edges.push((
             "start".into(),
@@ -173,10 +178,11 @@ impl MiningController {
         for (survey_idx, survey) in sample_surveys.iter().enumerate() {
             let survey_node = format!("survey_{}", survey_idx);
             let extract_survey_node = format!("extract_survey_{}", survey_idx);
+            let duration = surveyor_cooldown/(surveys_per_operation as f64);
             edges.push((
                 "survey".into(),
                 survey_node.clone(),
-                Edge::new_probability(Metric(0.0, surveyor_cooldown), 1.0),
+                Edge::new_probability(Metric(0.0, duration), 1.0),
             ));
             edges.push((
                 survey_node.clone(),
@@ -186,7 +192,7 @@ impl MiningController {
             edges.push((
                 survey_node.clone(),
                 extract_survey_node.clone(),
-                Edge::new_decision(Metric(0.0, 0.0)),
+                Edge::new_repeatable_decision(Metric(0.0, 0.0), 15),
             ));
             for deposit in survey.iter() {
                 edges.push((
@@ -210,6 +216,7 @@ impl MiningController {
             let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
                 GraphBuilder::new().edges_with_values(edges1).build();
 
+            // need this to return a graph, such that we can lookup any given node by name
             evaluate(&graph);
         }
 
@@ -240,31 +247,25 @@ fn asteroid_yields(traits: &Vec<String>) -> HashMap<&'static str, usize> {
 
 lazy_static::lazy_static! {
     static ref YIELD_WEIGHTS: HashMap<&'static str, usize> = {
-        let m = HashMap::from([
+        HashMap::from([
             ("ICE_WATER", 200),
-
             ("SILICON_CRYSTALS", 100),
             ("AMMONIA_ICE", 100),
             ("QUARTZ_SAND", 100),
             ("LIQUID_NITROGEN", 100),
             ("LIQUID_HYDROGEN", 100),
-
             ("HYDROCARBON", 50),
             ("IRON_ORE", 50),
             ("ALUMINUM_ORE", 50),
             ("COPPER_ORE", 50),
             ("SILVER_ORE", 50),
             ("PRECIOUS_STONES", 50),
-
             ("GOLD_ORE", 20),
             ("PLATINUM_ORE", 20),
             ("URANITE_ORE", 20),
-
             ("MERITIUM_ORE", 5),
-
             ("DIAMONDS", 1),
-        ]);
-        m
+        ])
     };
 
     static ref TRAIT_YIELDS: HashMap<&'static str, Vec<&'static str>> = {

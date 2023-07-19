@@ -4,13 +4,6 @@ use std::{ops::Add, collections::HashMap};
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Metric(pub f64, pub f64);
 
-impl Add for Metric {
-    type Output = Self;
-    fn add(self, other: Self) -> Self {
-        Self(self.0 + other.0, self.1 + other.1)
-    }
-}
-
 #[derive(Copy, Clone)]
 pub struct Edge<M> {
     metric: M,
@@ -20,7 +13,13 @@ impl<M> Edge<M> {
     pub fn new_decision(metric: M) -> Self {
         Self {
             metric,
-            edge_type: EdgeType::Decision,
+            edge_type: EdgeType::Decision(1),
+        }
+    }
+    pub fn new_repeatable_decision(metric: M, repeats: u32) -> Self {
+        Self {
+            metric,
+            edge_type: EdgeType::Decision(repeats),
         }
     }
     pub fn new_probability(metric: M, weight: f64) -> Self {
@@ -33,7 +32,7 @@ impl<M> Edge<M> {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum EdgeType {
-    Decision,
+    Decision(u32),
     Probability(f64),
 }
 
@@ -53,17 +52,18 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64, st
 
     // println!("step({}, {}) = {:?}", x, x0, ret);
     let (ret_x, ret_t) = match edge_type {
-        EdgeType::Decision => {
+        EdgeType::Decision(_) => {
             let mut max = (f64::MIN, f64::MIN);
             for &t in neighbours.iter() {
                 let y = t.target;
                 let edge = t.value.metric;
-                if let EdgeType::Probability(_) = t.value.edge_type {
-                    panic!()
-                }
+                let repeats = match t.value.edge_type {
+                    EdgeType::Decision(repeats) => repeats,
+                    _ => panic!(),
+                } as f64;
                 let (g, dg) = step(graph, y, x0, state);
-                let f = g + (edge.0 - x0 * edge.1);
-                let df = dg - edge.1;
+                let f = repeats * g + (edge.0 - x0 * edge.1);
+                let df = repeats * dg - edge.1;
                 if f > max.0 || f == max.0 && df > max.1 {
                     max.0 = f;
                     max.1 = df;
@@ -95,15 +95,22 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64, st
     (ret_x, ret_t)
 }
 
-pub fn evaluate(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>) {
+pub fn evaluate(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>) -> HashMap<usize, (f64, f64)> {
     let mut x0 = 0.0;
-    for _ in 0..10 {
+    let mut iterations = 0;
+    loop {
         let mut state: HashMap<usize, (f64, f64)> = HashMap::new();
         let (f, df) = step(graph, 0, x0, &mut state);
+        iterations += 1;
+    
         println!("f({}) = {}, df = {}", x0, f, df);
         x0 -= f / df;
+
+        if f.abs() < 1e-6 || iterations >= 10 {
+            println!("x0 = {}", x0);
+            return state;
+        }
     }
-    println!("x0 = {}", x0);
 }
 
 #[cfg(test)]
