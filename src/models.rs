@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -159,7 +159,7 @@ pub struct Survey {
     pub signature: String,
     pub symbol: String,
     pub deposits: Vec<Symbol>,
-    pub expiration: NaiveDateTime,
+    pub expiration: DateTime<Utc>,
     pub size: String,
 }
 
@@ -169,5 +169,20 @@ pub struct ShipCooldown {
     pub ship_symbol: String,
     pub total_seconds: u32,
     pub remaining_seconds: u32,
-    pub expiration: NaiveDateTime,
+    pub expiration: DateTime<Utc>,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use serde_json::Value;
+
+    #[test]
+    fn test_survey_deserialize() {
+        let data = r#"{"data":{"cooldown":{"shipSymbol":"SOLARTRADE_INC-3","totalSeconds":70,"remainingSeconds":69,"expiration":"2023-07-22T12:31:37.322Z"},"surveys":[{"signature":"X1-JK96-45265A-FE9FBF","symbol":"X1-JK96-45265A","deposits":[{"symbol":"AMMONIA_ICE"},{"symbol":"AMMONIA_ICE"},{"symbol":"AMMONIA_ICE"},{"symbol":"ALUMINUM_ORE"},{"symbol":"SILICON_CRYSTALS"},{"symbol":"AMMONIA_ICE"}],"expiration":"2023-07-22T12:41:45.322Z","size":"SMALL"}]}}"#;
+        let mut body: Value = serde_json::from_str(data).unwrap();
+        let surveys: Vec<Survey> = serde_json::from_value(body["data"]["surveys"].take()).unwrap();
+        assert_eq!(surveys.len(), 1);
+        assert_eq!(surveys[0].deposits.len(), 6);
+    }
 }

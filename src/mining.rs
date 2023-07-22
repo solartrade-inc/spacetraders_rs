@@ -54,6 +54,7 @@ impl MiningExecutor {
         match &successor.as_ref().map(|s| s.as_str()) {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.survey().await;
             }
             _ => panic!("Unexpected successor: {:?}", successor),

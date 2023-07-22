@@ -77,7 +77,7 @@ impl ApiClient {
         self.request(req).await
     }
 
-    pub async fn set_auth_token(&mut self, token: String) {
+    pub fn set_auth_token(&mut self, token: String) {
         self.auth_token = Some(token);
     }
 
