@@ -14,9 +14,9 @@ async fn main() {
     let mut controller = Controller::new(&callsign).load().await;
 
     // refetch agent
-    controller.fetch_agent().await;
+    let _ = controller.api_client.fetch_agent().await;
     // refetch contracts
-    controller.fetch_contracts(1, 20).await;
+    let _ = controller.api_client.fetch_contracts(1, 20).await;
     // refetch ships
     controller.fetch_ships(1, 20).await;
 
@@ -25,7 +25,10 @@ async fn main() {
     ship_controller.flight_mode("CRUISE").await;
 
     let ship_system = ship_controller.ship().nav.system_symbol.clone();
-    let waypoints = controller.fetch_system_waypoints(&ship_system).await;
+    let waypoints = controller
+        .api_client
+        .fetch_system_waypoints(&ship_system)
+        .await;
     // let system = client.systems.get(ship.location).unwrap();
 
     debug!("Waypoints: {:?}", waypoints);

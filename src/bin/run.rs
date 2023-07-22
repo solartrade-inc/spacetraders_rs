@@ -14,22 +14,25 @@ async fn main() {
     let mut controller = Controller::new(&callsign).load().await;
 
     // refetch agent + ships
-    controller.fetch_agent().await;
-    controller.fetch_contracts(1, 20).await;
-    controller.fetch_ships(1, 20).await;
+    let _ = controller.api_client.fetch_agent().await;
+    let _ = controller.api_client.fetch_contracts(1, 20).await;
+    let _ = controller.fetch_ships(1, 20).await;
 
     // control our command frigate
     let mut ship_controller = controller.ship_controller(3);
     ship_controller.flight_mode("CRUISE").await;
 
     let ship_system = ship_controller.ship().nav.system_symbol.clone();
-    let waypoints = controller.fetch_system_waypoints(&ship_system).await;
+    let waypoints = controller
+        .api_client
+        .fetch_system_waypoints(&ship_system)
+        .await;
     debug!("Waypoints: {:?}", waypoints);
 
     let asteroid = waypoints.iter().find(|w| util::is_asteroid(w)).unwrap();
 
     // call into mining module
-    let mut mining_controller = MiningController {
+    let mining_controller = MiningController {
         par: controller,
         ship_idx: 3,
         asteroid_symbol: asteroid.symbol.clone(),

@@ -3,9 +3,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::decision_tree::{self, evaluate, Edge, Metric};
 use crate::models::*;
-use crate::{api_client::ApiClient, controller::Controller, database::DatabaseClient, util};
+use crate::{controller::Controller, util};
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
-use lazy_static::lazy_static;
+
 use log::debug;
 use rand::prelude::*;
 use rand::Rng;
@@ -40,8 +40,8 @@ impl MiningExecutor {
         // map S -> state
         // states: [D]start, [P]extract, [P]survey, [D]cargo_{symbol}, [D]cargo_{symbol}_stripped, [D]survey_{idx}, [P]extract_survey_{idx}, [D]finish
 
-        let is_cargo_empty = ship.cargo.units == 0;
-        let have_survey = false;
+        let _is_cargo_empty = ship.cargo.units == 0;
+        let _have_survey = false;
 
         let state: String = if ship.cargo.units == 0 {
             "start".into()
@@ -55,7 +55,7 @@ impl MiningExecutor {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(self.ship_idx);
                 ship_controller.survey().await;
-            },
+            }
             _ => panic!("Unexpected successor: {:?}", successor),
         };
     }
@@ -63,12 +63,12 @@ impl MiningExecutor {
 
 pub struct MiningController {
     pub par: Controller,
-    pub ship_idx: i32,
+    pub ship_idx: usize,
     pub asteroid_symbol: String,
 }
 
 impl MiningController {
-    pub fn new(par: Controller, ship_idx: i32, asteroid_symbol: String) -> Self {
+    pub fn new(par: Controller, ship_idx: usize, asteroid_symbol: String) -> Self {
         Self {
             par,
             ship_idx,
@@ -83,7 +83,11 @@ impl MiningController {
 
         // 1. load asteroid
         let ship_system = ship.nav.system_symbol.clone();
-        let waypoints = self.par.fetch_system_waypoints(&ship_system).await;
+        let waypoints = self
+            .par
+            .api_client
+            .fetch_system_waypoints(&ship_system)
+            .await;
         let asteroid_waypoint = waypoints
             .iter()
             .find(|w| w.symbol == self.asteroid_symbol)
@@ -147,7 +151,7 @@ impl MiningController {
 
         let mut edges: Vec<(String, String, Edge<Metric>)> = vec![];
 
-        let deposits = asteroid_yields(&asteroid_field_traits);
+        let deposits = asteroid_yields(asteroid_field_traits);
         let is_stripped = asteroid_field_traits.contains(&"STRIPPED".to_string());
         let _sum = deposits.values().sum::<usize>();
 
@@ -327,16 +331,16 @@ impl MiningController {
                         len
                     }
                 };
-                edges1.push((from_idx, to_idx, edge.clone()));
+                edges1.push((from_idx, to_idx, *edge));
             }
 
             let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
                 GraphBuilder::new().edges_with_values(edges1).build();
             let g1 = evaluate(&graph, nodes["start"]);
-            
+
             let mut g = HashMap::new();
             for (node_name, node_idx) in nodes.iter() {
-                if let Some(&ref entry) = g1.1.get(&node_idx) {
+                if let Some(entry) = g1.1.get(node_idx) {
                     let entry1 = decision_tree::State {
                         fx: entry.fx,
                         successor: entry.successor.map(|s| nodes_inv[s].clone()),
@@ -345,11 +349,11 @@ impl MiningController {
                 }
             }
             PreparedGraph {
-                nodes: nodes,
+                nodes,
                 x0: g1.0,
                 state: g,
                 edges,
-                graph: graph,
+                graph,
             }
         }
     }

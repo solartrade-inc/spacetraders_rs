@@ -3,8 +3,8 @@ use crate::diesel::ExpressionMethods;
 use crate::diesel::OptionalExtension as _;
 use crate::models::Market;
 use crate::models::Survey;
+
 use crate::schema::*;
-use crate::schema::surveys::asteroid_symbol;
 use diesel::QueryDsl as _;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;

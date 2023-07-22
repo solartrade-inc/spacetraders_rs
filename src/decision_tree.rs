@@ -1,5 +1,5 @@
 use graph_builder::prelude::*;
-use std::{collections::HashMap, ops::Add};
+use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Metric(pub f64, pub f64);
@@ -48,8 +48,7 @@ fn step(
     x: usize,
     x0: f64,
     state: &mut HashMap<usize, State<usize>>,
-) -> State<usize>
-{
+) -> State<usize> {
     if let Some(ret) = state.get(&x) {
         return ret.clone();
     }

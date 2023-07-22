@@ -7,11 +7,8 @@ use crate::db_models;
 use crate::models::*;
 
 use chrono::Utc;
-use hyper::body::to_bytes;
-use hyper::{Body, Uri};
-use log::{debug, error, info};
-use serde_json::json;
-use serde_json::Value;
+
+use log::debug;
 
 pub struct ControllerBuilder {
     callsign: String,
@@ -23,7 +20,7 @@ impl ControllerBuilder {
         let agent = db_client.load_agent(&self.callsign).await;
         // let ships = vec![]; // client.load_ships(&agent.symbol).await;
 
-        api_client.auth_token = Some(agent.bearer_token.clone());
+        api_client.set_auth_token(agent.bearer_token.clone());
 
         Controller {
             api_client,
@@ -54,106 +51,13 @@ impl Controller {
         }
     }
 
-    pub async fn fetch_agent(&mut self) {
-        let uri: Uri = "https://api.spacetraders.io/v2/my/agent"
-            .to_string()
-            .parse()
-            .unwrap();
-        let req = hyper::Request::get(uri)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.agent.bearer_token),
-            )
-            .body(Body::empty())
-            .unwrap();
-        let res = self.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        assert_eq!(status, 200);
-        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body = std::str::from_utf8(&body_bytes).unwrap();
-        // info!("Agent: {:?}", body);
-    }
-
-    pub async fn fetch_contracts(&mut self, page: u32, limit: u32) {
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/my/contracts?page={}&limit={}",
-            page, limit
-        )
-        .parse()
-        .unwrap();
-        let req = hyper::Request::get(uri)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.agent.bearer_token),
-            )
-            .body(Body::empty())
-            .unwrap();
-        let res = self.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        assert_eq!(status, 200);
-        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body = std::str::from_utf8(&body_bytes).unwrap();
-        // info!("Contracts: {:?}", body);
-    }
-
     pub async fn fetch_ships(&mut self, page: u32, limit: u32) {
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/my/ships?page={}&limit={}",
-            page, limit
-        )
-        .parse()
-        .unwrap();
-        let req = hyper::Request::get(uri)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.agent.bearer_token),
-            )
-            .body(Body::empty())
-            .unwrap();
-        let res = self.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        assert_eq!(status, 200);
-        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body = std::str::from_utf8(&body_bytes).unwrap();
-
-        let ships: List<Ship> = serde_json::from_str(body).unwrap();
+        let ships: List<Ship> = self.api_client.fetch_ships(page, limit).await;
 
         // info!("Ships: {:?}", ships);
         for ship in ships.data.into_iter() {
             self.ships.insert(ship.symbol.clone(), ship);
         }
-    }
-
-    pub async fn fetch_system_waypoints(&mut self, system_symbol: &str) -> Vec<Waypoint> {
-        let page = 1;
-        let limit = 20;
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/systems/{}/waypoints?page={}&limit={}",
-            system_symbol, page, limit
-        )
-        .parse()
-        .unwrap();
-        let req = hyper::Request::get(uri)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.agent.bearer_token),
-            )
-            .body(Body::empty())
-            .unwrap();
-        let res = self.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        assert_eq!(status, 200);
-        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body = std::str::from_utf8(&body_bytes).unwrap();
-
-        let waypoints: List<Waypoint> = serde_json::from_str(body).unwrap();
-        assert_eq!(waypoints.meta.page, page);
-        assert_eq!(waypoints.meta.limit, limit);
-        assert!(waypoints.meta.total <= 20);
-
-        // info!("Waypoints: {:?}", waypoints);
-        waypoints.data
     }
 
     pub fn ship_controller(&mut self, idx: usize) -> ShipController {
@@ -183,30 +87,7 @@ impl<'a> ShipController<'a> {
             return;
         }
         debug!("Flight mode: {} -> {}", ship.nav.flight_mode, target);
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/my/ships/{}/nav",
-            self.symbol
-        )
-        .parse()
-        .unwrap();
-        let payload = json! ({
-            "flightMode": target,
-        });
-        let req = hyper::Request::patch(uri)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.par.agent.bearer_token),
-            )
-            .body(hyper::Body::from(payload.to_string()))
-            .unwrap();
-        let res = self.par.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        assert_eq!(status, 200);
-        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-        let body = std::str::from_utf8(&body_bytes).unwrap();
-        let nav: Data<ShipNav> = serde_json::from_str(body).unwrap();
-        ship.nav = nav.data;
+        ship.nav = self.par.api_client.flight_mode(&self.symbol, target).await;
     }
 
     pub async fn orbit_status(&mut self, target: &str) {
@@ -215,38 +96,11 @@ impl<'a> ShipController<'a> {
             return;
         }
         debug!("Orbit status: {} -> {}", ship.nav.status, target);
-        let order = match target {
-            "IN_ORBIT" => "orbit",
-            "DOCKED" => "dock",
+        let nav = match target {
+            "IN_ORBIT" => self.par.api_client.orbit(&self.symbol).await,
+            "DOCKED" => self.par.api_client.dock(&self.symbol).await,
             _ => panic!("Unknown orbit status: {}", target),
         };
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/my/ships/{}/{}",
-            self.symbol, order
-        )
-        .parse()
-        .unwrap();
-        let req = hyper::Request::post(&uri)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.par.agent.bearer_token),
-            )
-            .header("Content-Length", "0")
-            .body(Body::empty())
-            .unwrap();
-        let res = self.par.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        let mut body: Value = {
-            let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-            let body = std::str::from_utf8(&body_bytes).unwrap();
-            serde_json::from_str(body).unwrap()
-        };
-        if status != 200 {
-            error!("{} POST {}", status, uri);
-            error!("{}", body);
-            panic!("Failed to orbit");
-        }
-        let nav: ShipNav = serde_json::from_value(body["data"]["nav"].take()).unwrap();
         ship.nav = nav;
         assert_eq!(ship.nav.status, target);
     }
@@ -257,36 +111,7 @@ impl<'a> ShipController<'a> {
         if ship.nav.waypoint_symbol == target {
             return;
         }
-        debug!("Navigate: {}", target);
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/my/ships/{}/navigate",
-            self.symbol
-        )
-        .parse()
-        .unwrap();
-        let payload = json! ({
-            "waypointSymbol": target,
-        });
-        let req = hyper::Request::post(uri)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.par.agent.bearer_token),
-            )
-            .body(hyper::Body::from(payload.to_string()))
-            .unwrap();
-        let res = self.par.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        let body: Value = {
-            let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
-            let body = std::str::from_utf8(&body_bytes).unwrap();
-            debug!("Navigate response: {}", body);
-            serde_json::from_str(body).unwrap()
-        };
-        assert_eq!(status, 200);
-
-        let nav: ShipNav = serde_json::from_value(body["data"]["nav"].clone()).unwrap();
-        let fuel: ShipFuel = serde_json::from_value(body["data"]["fuel"].clone()).unwrap();
+        let (nav, fuel) = self.par.api_client.navigate(&self.symbol, target).await;
         ship.nav = nav;
         ship.fuel = fuel;
 
@@ -313,63 +138,35 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn survey(&mut self) -> Vec<Survey> {
+        self.orbit_status("IN_ORBIT").await;
+
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
         ship.cooldown = Some(cooldown);
         self.par.db_client.insert_surveys(&surveys).await;
 
-        let e = self.par.surveys.entry(ship.nav.waypoint_symbol.clone()).or_insert(vec![]);
+        let e = self
+            .par
+            .surveys
+            .entry(ship.nav.waypoint_symbol.clone())
+            .or_insert(vec![]);
         e.extend(surveys.clone());
-    
+
         surveys
     }
 
     pub async fn refuel(&mut self) {
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
-        let refuel_units = (ship.fuel.capacity - ship.fuel.current) / 100;
+        let refuel_units = (ship.fuel.capacity - ship.fuel.current) / 100 * 100;
         if refuel_units == 0 {
             return;
         }
         debug!("Refuel: {} units", refuel_units);
         self.orbit_status("DOCKED").await;
-        let mut ship = self.par.ships.get_mut(&self.symbol).unwrap();
-        let uri: Uri = format!(
-            "https://api.spacetraders.io/v2/my/ships/{}/refuel",
-            self.symbol
-        )
-        .parse()
-        .unwrap();
-        let payload = json! ({
-            "units": 100 * refuel_units,
-        });
-        let req = hyper::Request::post(&uri)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.par.agent.bearer_token),
-            )
-            .body(hyper::Body::from(payload.to_string()))
-            .unwrap();
-        let res = self.par.api_client.inner.request(req).await.unwrap();
-        let status = res.status();
-        let body = {
-            let body = to_bytes(res.into_body()).await.unwrap();
-            String::from_utf8(body.to_vec()).unwrap()
-        };
-        if status != 200 {
-            error!("{} POST {}", status, uri);
-            error!("{}", body);
-            panic!("Failed to refuel");
-        }
+        let (_agent, fuel) = self.par.api_client.refuel(&self.symbol, refuel_units).await;
 
-        debug!("Refuel response: {}", body);
-        let body: Value = serde_json::from_str(&body).unwrap();
-
-        let _agent: Agent = serde_json::from_value(body["data"]["agent"].clone()).unwrap();
-        let fuel: ShipFuel = serde_json::from_value(body["data"]["fuel"].clone()).unwrap();
+        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         ship.fuel = fuel;
         debug!("Updated fuel: {:?}", ship.fuel.current);
-        // @@ self.par.agent = agent;
-        // let transaction: Transaction = serde_json::from_value(body["data"]["agent"].clone()).unwrap();
     }
 }
