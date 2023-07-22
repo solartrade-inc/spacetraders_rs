@@ -31,6 +31,7 @@ impl ControllerBuilder {
             agent,
             ships: HashMap::new(),
             markets: HashMap::new(),
+            surveys: HashMap::new(),
         }
     }
 }
@@ -38,9 +39,12 @@ impl ControllerBuilder {
 pub struct Controller {
     pub api_client: ApiClient,
     pub db_client: DatabaseClient,
+
+    // universe
     pub ships: HashMap<String, Ship>,
     pub markets: HashMap<String, Market>,
     pub agent: db_models::Agent,
+    pub surveys: HashMap<String, Vec<Survey>>,
 }
 
 impl Controller {
@@ -68,7 +72,7 @@ impl Controller {
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body = std::str::from_utf8(&body_bytes).unwrap();
-        info!("Agent: {:?}", body);
+        // info!("Agent: {:?}", body);
     }
 
     pub async fn fetch_contracts(&mut self, page: u32, limit: u32) {
@@ -90,7 +94,7 @@ impl Controller {
         assert_eq!(status, 200);
         let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
         let body = std::str::from_utf8(&body_bytes).unwrap();
-        info!("Contracts: {:?}", body);
+        // info!("Contracts: {:?}", body);
     }
 
     pub async fn fetch_ships(&mut self, page: u32, limit: u32) {
@@ -115,7 +119,7 @@ impl Controller {
 
         let ships: List<Ship> = serde_json::from_str(body).unwrap();
 
-        info!("Ships: {:?}", ships);
+        // info!("Ships: {:?}", ships);
         for ship in ships.data.into_iter() {
             self.ships.insert(ship.symbol.clone(), ship);
         }
@@ -306,6 +310,16 @@ impl<'a> ShipController<'a> {
         // update database
         self.par.db_client.upsert_market(&market).await;
         market
+    }
+
+    pub async fn survey(&mut self) -> Vec<Survey> {
+        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
+        ship.cooldown = Some(cooldown);
+        self.par.surveys[loc].append(surveys)
+        self.par.db_client.insert_surveys(&surveys).await;
+    
+        surveys
     }
 
     pub async fn refuel(&mut self) {

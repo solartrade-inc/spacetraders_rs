@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::{HashMap, HashSet};
 
 use crate::decision_tree::{self, evaluate, Edge, Metric};
@@ -6,8 +7,68 @@ use crate::{api_client::ApiClient, controller::Controller, database::DatabaseCli
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use lazy_static::lazy_static;
 use log::debug;
-use rand::Rng;
 use rand::prelude::*;
+use rand::Rng;
+
+pub struct PreparedGraph {
+    pub nodes: HashMap<String, usize>,
+    pub x0: f64,
+    pub state: HashMap<String, decision_tree::State<String>>,
+    pub edges: Vec<(String, String, Edge<Metric>)>,
+    pub graph: DirectedCsrGraph<usize, (), Edge<Metric>>,
+}
+
+pub struct MiningExecutor {
+    pub par: Controller,
+    pub ship_idx: i32,
+    pub asteroid_symbol: String,
+    pub graph: PreparedGraph,
+}
+impl MiningExecutor {
+    async fn run(&mut self) {
+        loop {
+            self.step().await;
+        }
+    }
+
+    async fn step(&mut self) {
+        use graph_builder::DirectedNeighborsWithValues as _;
+
+        // identify mining state
+        let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
+        let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
+
+        // map S -> state
+        // states: [D]start, [P]extract, [P]survey, [D]cargo_{symbol}, [D]cargo_{symbol}_stripped, [D]survey_{idx}, [P]extract_survey_{idx}, [D]finish
+
+        let is_cargo_empty = ship.cargo.units == 0;
+        let have_survey = false;
+
+        let state: String = if ship.cargo.units == 0 {
+            "start".into()
+        } else {
+            panic!("TODO");
+        };
+        debug!("Mining state: {}", state);
+        let successor = self.graph.state[&state].successor;
+        debug!("Successor: {}", successor);
+        match state.as_str() {
+            "start" => {
+                let successor = successor.as_ref().unwrap();
+                match successor.as_str() {
+                    "extract" => {
+                        panic!("TODO extract");
+                    },
+                    "survey" => {
+                        panic!("TODO survey");
+                    },
+                    _ => panic!("unexpected successor"),
+            },
+            _ => panic!("TODO"),
+        }
+        panic!("TODO");
+    }
+}
 
 pub struct MiningController {
     pub par: Controller,
@@ -24,11 +85,7 @@ impl MiningController {
         }
     }
 
-    pub async fn run(&mut self) {
-        let _g = self.prep().await;
-    }
-
-    pub async fn prep(&mut self) -> () {
+    pub async fn run(mut self) {
         // 0. load ship
         let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
         let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
@@ -40,6 +97,11 @@ impl MiningController {
             .iter()
             .find(|w| w.symbol == self.asteroid_symbol)
             .unwrap();
+        let asteroid_traits: Vec<String> = asteroid_waypoint
+            .traits
+            .iter()
+            .map(|t| t.symbol.clone())
+            .collect();
 
         // 2. load markets
         let mut markets: Vec<Market> = vec![];
@@ -49,25 +111,53 @@ impl MiningController {
                 markets.push(market);
             }
         }
-        let asteroid_market = markets
-            .iter()
-            .find(|m| m.symbol == asteroid_waypoint.symbol)
-            .unwrap();
 
-        debug!("Ship: {:?}", ship);
-        debug!("Asteroid: {:?}", asteroid_waypoint.traits);
-        debug!("Markets: {:?}", markets);
+        // let ship_mounts = vec![MOUNT_SURVEYOR_II.clone(), MINING_LASER_II.clone(), MINING_LASER_II.clone()];
 
-        // construct decision tree based on:
+        let g = Self::mining_prep(
+            &asteroid_waypoint.symbol,
+            &asteroid_traits,
+            &markets,
+            &ship.mounts,
+        );
+        debug!(
+            "Full: {:?} cps over {} seconds",
+            g.x0 - g.state["start"].fx.0 / g.state["start"].fx.1,
+            -g.state["start"].fx.1
+        );
+        debug!(
+            "Extract: {:?} cps over {} seconds",
+            g.x0 - g.state["extract"].fx.0 / g.state["extract"].fx.1,
+            -g.state["extract"].fx.1
+        );
+        debug!(
+            "Survey: {:?} cps over {} seconds",
+            g.x0 - g.state["survey"].fx.0 / g.state["survey"].fx.1,
+            -g.state["survey"].fx.1
+        );
+
+        MiningExecutor {
+            par: self.par,
+            ship_idx: self.ship_idx,
+            asteroid_symbol: self.asteroid_symbol.clone(),
+            graph: g,
+        }
+        .run()
+        .await;
+    }
+
+    pub fn mining_prep(
+        asteroid_field_symbol: &str,
+        asteroid_field_traits: &Vec<String>,
+        markets: &Vec<Market>,
+        ship_mounts: &Vec<ShipMount>,
+    ) -> PreparedGraph {
+        // construct decision tree
 
         let mut edges: Vec<(String, String, Edge<Metric>)> = vec![];
 
-        let traits: Vec<String> = asteroid_waypoint
-            .traits
-            .iter()
-            .map(|t| t.symbol.clone())
-            .collect();
-        let deposits = asteroid_yields(&traits);
+        let deposits = asteroid_yields(&asteroid_field_traits);
+        let is_stripped = asteroid_field_traits.contains(&"STRIPPED".to_string());
         let _sum = deposits.values().sum::<usize>();
 
         debug!("Deposits: {:?}", deposits);
@@ -76,14 +166,14 @@ impl MiningController {
         let mut surveyors: Vec<_> = vec![];
         let mut extract_cooldown: f64 = 60.0;
         let mut mining_strength: f64 = 0.0;
-        for mount in ship.mounts {
+        for mount in ship_mounts {
             if mount.symbol.starts_with("MOUNT_MINING_LASER_") {
                 extract_cooldown += 10.0 * mount.requirements.power as f64;
                 mining_strength += mount.strength.unwrap() as f64;
             }
             if mount.symbol.starts_with("MOUNT_SURVEYOR_") {
                 surveyor_cooldown += 10.0 * mount.requirements.power as f64;
-                let survey_deposits = mount.deposits.unwrap();
+                let survey_deposits = mount.deposits.as_ref().unwrap();
                 // calculate intersection of deposits and survey_deposits
                 let mut intersection: Vec<String> = Vec::new();
                 for (&symbol, &_weight) in deposits.iter() {
@@ -103,7 +193,10 @@ impl MiningController {
         ));
         // extract edges
         for (symbol, &weight) in deposits.iter() {
-            let node = format!("cargo_{}", symbol);
+            let node = match is_stripped {
+                true => format!("cargo_{}_stripped", symbol),
+                false => format!("cargo_{}", symbol),
+            };
             edges.push((
                 "extract".into(),
                 node,
@@ -113,9 +206,15 @@ impl MiningController {
         // sell + jettison edges
         for (&symbol, _weight) in deposits.iter() {
             let cargo_node = format!("cargo_{}", symbol);
+            let cargo_node_stripped = format!("cargo_{}_stripped", symbol);
             // jettison
             edges.push((
                 cargo_node.clone(),
+                "finish".into(),
+                Edge::new_decision(Metric(0.0, 0.0)),
+            ));
+            edges.push((
+                cargo_node_stripped.clone(),
                 "finish".into(),
                 Edge::new_decision(Metric(0.0, 0.0)),
             ));
@@ -130,14 +229,21 @@ impl MiningController {
                 if let Some(unit_sell_price) = sell_price {
                     let mut duration = 0.0;
                     let mut profit = unit_sell_price as f64 * mining_strength;
-                    if market.symbol != asteroid_market.symbol {
+                    let mut profit_stripped = unit_sell_price as f64 * mining_strength / 2.0;
+                    if market.symbol != asteroid_field_symbol {
                         duration += 10.0; // crude estimate of travel and return time
                         profit -= 50.0; // crude estimate of fuel cost
+                        profit_stripped -= 50.0;
                     }
                     edges.push((
                         cargo_node.clone(),
                         "finish".into(),
                         Edge::new_decision(Metric(profit, duration)),
+                    ));
+                    edges.push((
+                        cargo_node_stripped.clone(),
+                        "finish".into(),
+                        Edge::new_decision(Metric(profit_stripped, duration)),
                     ));
                 }
             }
@@ -147,7 +253,7 @@ impl MiningController {
         edges.push((
             "start".into(),
             "survey".into(),
-            Edge::new_decision(Metric(0.0, 1.0)),
+            Edge::new_decision(Metric(0.0, 0.0)),
         ));
 
         // for the probability edges, there are too many combinations to fully enumerate,
@@ -162,7 +268,9 @@ impl MiningController {
                     let mut survey = vec![];
                     for _ in 0..num_deposits {
                         let deposit = deposits
-                            .choose_weighted(&mut rand::thread_rng(), |symbol| YIELD_WEIGHTS[symbol.as_str()])
+                            .choose_weighted(&mut rand::thread_rng(), |symbol| {
+                                YIELD_WEIGHTS[symbol.as_str()]
+                            })
                             .unwrap();
                         survey.push(deposit.clone());
                     }
@@ -178,7 +286,7 @@ impl MiningController {
         for (survey_idx, survey) in sample_surveys.iter().enumerate() {
             let survey_node = format!("survey_{}", survey_idx);
             let extract_survey_node = format!("extract_survey_{}", survey_idx);
-            let duration = surveyor_cooldown/(surveys_per_operation as f64);
+            let duration = surveyor_cooldown / (surveys_per_operation as f64);
             edges.push((
                 "survey".into(),
                 survey_node.clone(),
@@ -205,22 +313,54 @@ impl MiningController {
 
         {
             let mut edges1: Vec<(usize, usize, Edge<Metric>)> = vec![];
-            let mut nodes: HashMap<&str, usize> = HashMap::new();
-            nodes.insert("start", 0);
-            for (i, &(ref from, ref to, ref edge)) in edges.iter().enumerate() {
-                let from_idx = *nodes.entry(from.as_str()).or_insert(i);
-                let to_idx = *nodes.entry(to.as_str()).or_insert(2*edges.len() + i);
+            let mut nodes: HashMap<String, usize> = HashMap::new();
+            let mut nodes_inv: Vec<String> = vec![];
+            nodes.insert("start".into(), 0);
+            nodes_inv.push("start".into());
+            for (from, to, ref edge) in edges.iter() {
+                let from_idx = match nodes.get(from) {
+                    Some(&idx) => idx,
+                    None => {
+                        let len = nodes.len();
+                        nodes.insert(from.into(), len);
+                        nodes_inv.push(from.into());
+                        len
+                    }
+                };
+                let to_idx = match nodes.get(to) {
+                    Some(&idx) => idx,
+                    None => {
+                        let len = nodes.len();
+                        nodes.insert(to.into(), len);
+                        nodes_inv.push(to.into());
+                        len
+                    }
+                };
                 edges1.push((from_idx, to_idx, edge.clone()));
             }
 
             let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
                 GraphBuilder::new().edges_with_values(edges1).build();
-
-            // need this to return a graph, such that we can lookup any given node by name
-            evaluate(&graph);
+            let g1 = evaluate(&graph, nodes["start"]);
+            
+            let mut g = HashMap::new();
+            for (node_name, node_idx) in nodes.iter() {
+                if let Some(&ref entry) = g1.1.get(&node_idx) {
+                    let entry1 = decision_tree::State {
+                        fx: entry.fx,
+                        successor: entry.successor.map(|s| nodes_inv[s].clone()),
+                    };
+                    g.insert(node_name.to_string(), entry1);
+                }
+            }
+            PreparedGraph {
+                nodes: nodes,
+                x0: g1.0,
+                state: g,
+                edges,
+                graph: graph,
+            }
         }
-
-        // go to the asteroid and do some mining
     }
 }
 
@@ -246,6 +386,30 @@ fn asteroid_yields(traits: &Vec<String>) -> HashMap<&'static str, usize> {
 }
 
 lazy_static::lazy_static! {
+    static ref BASE_DEPOSITS: Vec<String> = vec!["QUARTZ_SAND".into(), "SILICON_CRYSTALS".into(), "PRECIOUS_STONES".into(), "ICE_WATER".into(), "AMMONIA_ICE".into(), "IRON_ORE".into(), "COPPER_ORE".into(), "SILVER_ORE".into(), "ALUMINUM_ORE".into(), "GOLD_ORE".into(), "PLATINUM_ORE".into()];
+
+    static ref MOUNT_SURVEYOR_I: ShipMount = ShipMount { symbol: "MOUNT_SURVEYOR_I".into(), strength: Some(1),
+        deposits: Some(BASE_DEPOSITS.clone()),
+        requirements: ShipMountRequirements { power: 1, crew: 2, slots: None } };
+    static ref MOUNT_SURVEYOR_II: ShipMount = {
+        let mut surveyor = ShipMount { symbol: "MOUNT_SURVEYOR_II".into(), strength: Some(2),
+            deposits: Some(BASE_DEPOSITS.clone()),
+            requirements: ShipMountRequirements { power: 4, crew: 3, slots: None } };
+        surveyor.deposits.as_mut().unwrap().push("DIAMONDS".into());
+        surveyor.deposits.as_mut().unwrap().push("URANITE_ORE".into());
+        surveyor
+    };
+    static ref MOUNT_SURVEYOR_III: ShipMount = {
+        let mut surveyor = ShipMount { symbol: "MOUNT_SURVEYOR_III".into(), strength: Some(3),
+            deposits: Some(BASE_DEPOSITS.clone()),
+            requirements: ShipMountRequirements { power: 7, crew: 5, slots: None } };
+        surveyor.deposits.as_mut().unwrap().push("DIAMONDS".into());
+        surveyor.deposits.as_mut().unwrap().push("MERITIUM_ORE".into());
+        surveyor
+    };
+
+    static ref MINING_LASER_II: ShipMount = ShipMount { symbol: "MOUNT_MINING_LASER_II".into(), strength: Some(25), deposits: None, requirements: ShipMountRequirements { power: 2, crew: 2, slots: None }};
+
     static ref YIELD_WEIGHTS: HashMap<&'static str, usize> = {
         HashMap::from([
             ("ICE_WATER", 200),

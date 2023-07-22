@@ -1,13 +1,13 @@
 use graph_builder::prelude::*;
-use std::{ops::Add, collections::HashMap};
+use std::{collections::HashMap, ops::Add};
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Metric(pub f64, pub f64);
 
 #[derive(Copy, Clone)]
 pub struct Edge<M> {
-    metric: M,
-    edge_type: EdgeType,
+    pub metric: M,
+    pub edge_type: EdgeType,
 }
 impl<M> Edge<M> {
     pub fn new_decision(metric: M) -> Self {
@@ -31,26 +31,44 @@ impl<M> Edge<M> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum EdgeType {
+pub enum EdgeType {
     Decision(u32),
     Probability(f64),
 }
 
-fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64, state: &mut HashMap<usize, (f64, f64)>) -> (f64, f64) {
+// State is the generated value of the node
+#[derive(Clone, Debug, PartialEq)]
+pub struct State<T> {
+    pub fx: (f64, f64),
+    pub successor: Option<T>,
+}
+
+fn step(
+    graph: &DirectedCsrGraph<usize, (), Edge<Metric>>,
+    x: usize,
+    x0: f64,
+    state: &mut HashMap<usize, State<usize>>,
+) -> State<usize>
+{
     if let Some(ret) = state.get(&x) {
-        return *ret;
+        return ret.clone();
     }
     if graph.out_degree(x) == 0 {
         // leaf
         // node themselves have no metric, only edges
-        state.insert(x, (0.0, 0.0));
-        return (0.0, 0.0);
+        let s = State {
+            fx: (0.0, 0.0),
+            successor: None,
+        };
+        state.insert(x, s.clone());
+        return s;
     }
     // println!("step({}, {})", x, x0);
     let neighbours = graph.out_neighbors_with_values(x).collect::<Vec<_>>();
     let edge_type = neighbours[0].value.edge_type;
 
     // println!("step({}, {}) = {:?}", x, x0, ret);
+    let mut successor = None;
     let (ret_x, ret_t) = match edge_type {
         EdgeType::Decision(_) => {
             let mut max = (f64::MIN, f64::MIN);
@@ -61,12 +79,13 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64, st
                     EdgeType::Decision(repeats) => repeats,
                     _ => panic!(),
                 } as f64;
-                let (g, dg) = step(graph, y, x0, state);
+                let (g, dg) = step(graph, y, x0, state).fx;
                 let f = repeats * g + (edge.0 - x0 * edge.1);
                 let df = repeats * dg - edge.1;
                 if f > max.0 || f == max.0 && df > max.1 {
                     max.0 = f;
                     max.1 = df;
+                    successor = Some(y);
                 }
             }
             max
@@ -81,7 +100,7 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64, st
                     EdgeType::Probability(w) => w,
                     _ => panic!(),
                 };
-                let (g, dg) = step(graph, y, x0, state);
+                let (g, dg) = step(graph, y, x0, state).fx;
                 let f = g + (edge.0 - x0 * edge.1);
                 let df = dg - edge.1;
                 sum.0 += f * edge_weight;
@@ -91,24 +110,31 @@ fn step(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>, x: usize, x0: f64, st
             (sum.0 / weight_sum, sum.1 / weight_sum)
         }
     };
-    state.insert(x, (ret_x, ret_t));
-    (ret_x, ret_t)
+    let s = State {
+        fx: (ret_x, ret_t),
+        successor,
+    };
+    state.insert(x, s.clone());
+    s
 }
 
-pub fn evaluate(graph: &DirectedCsrGraph<usize, (), Edge<Metric>>) -> HashMap<usize, (f64, f64)> {
+pub fn evaluate(
+    graph: &DirectedCsrGraph<usize, (), Edge<Metric>>,
+    start_idx: usize,
+) -> (f64, HashMap<usize, State<usize>>) {
     let mut x0 = 0.0;
     let mut iterations = 0;
     loop {
-        let mut state: HashMap<usize, (f64, f64)> = HashMap::new();
-        let (f, df) = step(graph, 0, x0, &mut state);
+        let mut state: HashMap<usize, State<usize>> = HashMap::new();
+        let (f, df) = step(graph, start_idx, x0, &mut state).fx;
         iterations += 1;
-    
-        println!("f({}) = {}, df = {}", x0, f, df);
+
+        // println!("f({}) = {}, df = {}", x0, f, df);
         x0 -= f / df;
 
         if f.abs() < 1e-6 || iterations >= 10 {
-            println!("x0 = {}", x0);
-            return state;
+            // println!("x0 = {}", x0);
+            return (x0, state);
         }
     }
 }
@@ -126,7 +152,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph);
+        evaluate(&graph, 0);
     }
 
     #[test]
@@ -142,7 +168,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph);
+        evaluate(&graph, 0);
     }
 
     #[test]
@@ -159,7 +185,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph);
+        evaluate(&graph, 0);
     }
 
     #[test]
@@ -173,6 +199,6 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph);
+        evaluate(&graph, 0);
     }
 }
