@@ -303,12 +303,12 @@ impl<'a> ShipController<'a> {
             .api_client
             .fetch_market(&ship.nav.system_symbol, &ship.nav.waypoint_symbol)
             .await;
+        // update database
+        self.par.db_client.upsert_market(&market).await;
         // update memory
         self.par
             .markets
             .insert(market.symbol.clone(), market.clone());
-        // update database
-        self.par.db_client.upsert_market(&market).await;
         market
     }
 
@@ -316,8 +316,10 @@ impl<'a> ShipController<'a> {
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
         ship.cooldown = Some(cooldown);
-        self.par.surveys[loc].append(surveys)
         self.par.db_client.insert_surveys(&surveys).await;
+
+        let e = self.par.surveys.entry(ship.nav.waypoint_symbol.clone()).or_insert(vec![]);
+        e.extend(surveys.clone());
     
         surveys
     }

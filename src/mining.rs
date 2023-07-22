@@ -20,7 +20,7 @@ pub struct PreparedGraph {
 
 pub struct MiningExecutor {
     pub par: Controller,
-    pub ship_idx: i32,
+    pub ship_idx: usize,
     pub asteroid_symbol: String,
     pub graph: PreparedGraph,
 }
@@ -28,12 +28,11 @@ impl MiningExecutor {
     async fn run(&mut self) {
         loop {
             self.step().await;
+            panic!("TODO");
         }
     }
 
     async fn step(&mut self) {
-        use graph_builder::DirectedNeighborsWithValues as _;
-
         // identify mining state
         let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
         let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
@@ -50,23 +49,15 @@ impl MiningExecutor {
             panic!("TODO");
         };
         debug!("Mining state: {}", state);
-        let successor = self.graph.state[&state].successor;
-        debug!("Successor: {}", successor);
-        match state.as_str() {
-            "start" => {
-                let successor = successor.as_ref().unwrap();
-                match successor.as_str() {
-                    "extract" => {
-                        panic!("TODO extract");
-                    },
-                    "survey" => {
-                        panic!("TODO survey");
-                    },
-                    _ => panic!("unexpected successor"),
+        let successor = &self.graph.state[&state].successor;
+        debug!("Successor: {:?}", successor);
+        match &successor.as_ref().map(|s| s.as_str()) {
+            Some("survey") => {
+                let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                ship_controller.survey().await;
             },
-            _ => panic!("TODO"),
-        }
-        panic!("TODO");
+            _ => panic!("Unexpected successor: {:?}", successor),
+        };
     }
 }
 

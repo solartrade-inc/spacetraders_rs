@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -36,6 +36,9 @@ pub struct Ship {
     pub mounts: Vec<ShipMount>,
     pub cargo: ShipCargo,
     pub fuel: ShipFuel,
+
+    // !! not in API response (yet)
+    pub cooldown: Option<ShipCooldown>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -149,4 +152,22 @@ pub struct Agent {
     pub credits: i64,
     #[serde(rename = "startingFaction")]
     pub starting_faction: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Survey {
+    pub signature: String,
+    pub symbol: String,
+    pub deposits: Vec<Symbol>,
+    pub expiration: NaiveDateTime,
+    pub size: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShipCooldown {
+    pub ship_symbol: String,
+    pub total_seconds: u32,
+    pub remaining_seconds: u32,
+    pub expiration: NaiveDateTime,
 }

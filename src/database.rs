@@ -2,7 +2,9 @@ use crate::db_models::Agent;
 use crate::diesel::ExpressionMethods;
 use crate::diesel::OptionalExtension as _;
 use crate::models::Market;
+use crate::models::Survey;
 use crate::schema::*;
+use crate::schema::surveys::asteroid_symbol;
 use diesel::QueryDsl as _;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
@@ -68,14 +70,14 @@ impl DatabaseClient {
             .values((
                 markets::symbol.eq(&market.symbol),
                 markets::market.eq(&market_val),
-                markets::createdAt.eq(diesel::dsl::now),
-                markets::updatedAt.eq(diesel::dsl::now),
+                markets::created_at.eq(diesel::dsl::now),
+                markets::updated_at.eq(diesel::dsl::now),
             ))
             .on_conflict(markets::symbol)
             .do_update()
             .set((
                 markets::market.eq(&market_val),
-                markets::updatedAt.eq(diesel::dsl::now),
+                markets::updated_at.eq(diesel::dsl::now),
             ))
             .execute(&mut conn)
             .await
@@ -88,8 +90,8 @@ impl DatabaseClient {
         struct ResultRow {
             symbol: String,
             market: Value,
-            createdAt: chrono::NaiveDateTime,
-            updatedAt: chrono::NaiveDateTime,
+            created_at: chrono::NaiveDateTime,
+            updated_at: chrono::NaiveDateTime,
         }
 
         let mut conn = self.db.get().await.unwrap();
@@ -97,8 +99,8 @@ impl DatabaseClient {
             .select((
                 markets::symbol,
                 markets::market,
-                markets::createdAt,
-                markets::updatedAt,
+                markets::created_at,
+                markets::updated_at,
             ))
             .filter(markets::symbol.eq(symbol))
             .first(&mut conn)
@@ -106,5 +108,28 @@ impl DatabaseClient {
             .optional()
             .unwrap();
         serde_json::from_value(row.unwrap().market).unwrap()
+    }
+
+    pub async fn insert_surveys(&self, surveys: &Vec<Survey>) {
+        let mut conn = self.db.get().await.unwrap();
+        let inserts = surveys
+            .iter()
+            .map(|s: &Survey| {
+                let val: Value = serde_json::to_value(s).unwrap();
+                (
+                    surveys::asteroid_symbol.eq(&s.symbol),
+                    surveys::survey.eq(val),
+                    surveys::expires_at.eq(&s.expiration),
+                    surveys::created_at.eq(diesel::dsl::now),
+                    surveys::updated_at.eq(diesel::dsl::now),
+                    surveys::extract_state.eq(0),
+                )
+            })
+            .collect::<Vec<_>>();
+        diesel::insert_into(surveys::table)
+            .values(inserts)
+            .execute(&mut conn)
+            .await
+            .unwrap();
     }
 }

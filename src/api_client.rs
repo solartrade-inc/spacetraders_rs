@@ -1,4 +1,4 @@
-use crate::models::Market;
+use crate::models::*;
 
 use hyper::Uri;
 use log::*;
@@ -78,18 +78,18 @@ impl ApiClient {
         .await
     }
 
-    pub async fn survey(&self, ship_symbol: &str) -> (Vec<Survey>, Cooldown) {
-        self.post(
+    pub async fn survey(&self, ship_symbol: &str) -> (Vec<Survey>, ShipCooldown) {
+        let resp = self.post(
             &format!("/ships/{}/survey", ship_symbol), "",
         )
-        .await
+        .await;
         assert!(resp.status.is_success(), "Failed to survey: {} {}", resp.status, resp.body);
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let surveys: Vec<Survey> = serde_json::from_value(body["data"]["surveys"].take()).unwrap_or_else(|e| {
             error!("Decode error: '{}' while parsing surveys\n{}", e, resp.body);
             panic!();
         });
-        let cooldown: Cooldown = serde_json::from_value(body["data"]["cooldown"].take()).unwrap_or_else(|e| {
+        let cooldown: ShipCooldown = serde_json::from_value(body["data"]["cooldown"].take()).unwrap_or_else(|e| {
             error!("Decode error: '{}' while parsing cooldown\n{}", e, resp.body);
             panic!();
         });
