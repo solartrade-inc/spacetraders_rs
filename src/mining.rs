@@ -129,6 +129,9 @@ impl MiningExecutor {
                 .or_insert(vec![])
                 .clone();
             for survey in surveys.iter() {
+                if survey.inner().expiration < chrono::Utc::now() {
+                    continue;
+                }
                 let usuable = self.judge(&survey.inner());
                 if usuable {
                     usable_surveys.push(survey.clone());

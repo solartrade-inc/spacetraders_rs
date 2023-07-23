@@ -208,17 +208,16 @@ impl<'a> ShipController<'a> {
             }
             Err(e) => {
                 debug!("Extraction failed: {:?}", e);
-                if e.code == 4224 {
-                    // depleted survey
-                    debug!("Survey depleted, removing from database");
+                if e.code == 4224 || e.code == 4221 {
+                    // depleted survey or expired survey
+                    debug!("Removing from database");
                     self.par.db_client.update_survey_state(&survey, 2).await;
                     // remove from self.par.surveys as well
-                    let e = self
-                        .par
+                    self.par
                         .surveys
                         .entry(ship.nav.waypoint_symbol.clone())
-                        .or_insert(vec![]);
-                    e.retain(|s| s.id != survey.id);
+                        .or_insert(vec![])
+                        .retain(|s| s.id != survey.id);
                 }
             }
         }

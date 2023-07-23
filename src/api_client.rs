@@ -104,8 +104,7 @@ impl ApiClient {
             resp.status,
             resp.body
         );
-        // 409 Conflict
-        // {"error":{"message":"Ship action is still on cooldown for 18 second(s).","code":4000,"data":{"cooldown":{"shipSymbol":"SOLARTRADE_INC-3","totalSeconds":70,"remainingSeconds":18,"expiration":"2023-07-23T13:22:33.774Z"}}}}
+        // 409 Conflict {"error":{"message":"Ship action is still on cooldown for 18 second(s).","code":4000,"data":{"cooldown":{"shipSymbol":"SOLARTRADE_INC-3","totalSeconds":70,"remainingSeconds":18,"expiration":"2023-07-23T13:22:33.774Z"}}}}
 
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let surveys: Vec<Survey> = serde_json::from_value(body["data"]["surveys"].take())
@@ -171,8 +170,9 @@ impl ApiClient {
                     });
                 Ok((extraction, cooldown, cargo))
             }
-            409 => {
+            400 | 409 => {
                 // 409 Conflict {"error":{"message":"Ship extract failed. Survey X1-JK96-45265A-AF05A7 has been exhausted.","code":4224}}
+                // 400 Bad Request {"error":{"message":"Ship survey failed. Target signature is no longer in range or valid.","code":4221}}
                 let mut body: Value = serde_json::from_str(&resp.body).unwrap();
                 let error: ApiError =
                     serde_json::from_value(body["error"].take()).unwrap_or_else(|e| {
