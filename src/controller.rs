@@ -212,6 +212,13 @@ impl<'a> ShipController<'a> {
                     // depleted survey
                     debug!("Survey depleted, removing from database");
                     self.par.db_client.update_survey_state(&survey, 2).await;
+                    // remove from self.par.surveys as well
+                    let e = self
+                        .par
+                        .surveys
+                        .entry(ship.nav.waypoint_symbol.clone())
+                        .or_insert(vec![]);
+                    e.retain(|s| s.id != survey.id);
                 }
             }
         }

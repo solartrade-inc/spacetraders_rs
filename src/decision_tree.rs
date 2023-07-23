@@ -142,6 +142,8 @@ pub fn evaluate(
 mod test {
     use super::*;
 
+    /// Given the decision between 1c per 1 second and 3c per 2 seconds,
+    /// the optimal choice is the latter at 1.5c per second.
     #[test]
     fn graph0() {
         let mut edges: Vec<(usize, usize, Edge<Metric>)> = vec![];
@@ -151,30 +153,52 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph, 0);
+        let (rate, state) = evaluate(&graph, 0);
+        assert_eq!(rate, 1.5);
+        assert_eq!(state[&0].successor, Some(2));
     }
 
+    #[test]
+    fn graph_prob_only() {
+        let mut edges: Vec<(usize, usize, Edge<Metric>)> = vec![];
+        edges.push((0, 1, Edge::new_probability(Metric(4.0, 2.0), 1.0))); // 33.3%: 4 per 2s
+        edges.push((0, 2, Edge::new_probability(Metric(5.0, 1.0), 2.0))); // 66.7%: 5 per 1s
+
+        let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
+            GraphBuilder::new().edges_with_values(edges).build();
+
+        let (rate, _state) = evaluate(&graph, 0);
+        assert_eq!(rate, 3.5);
+    }
+
+    /// The root node 0 is a probability node, and nodes 1 and 2 are decision nodes.
     #[test]
     fn graph3() {
         let mut edges: Vec<(usize, usize, Edge<Metric>)> = vec![];
         edges.push((0, 1, Edge::new_probability(Metric(0.0, 0.0), 1.0)));
         edges.push((0, 2, Edge::new_probability(Metric(0.0, 0.0), 3.0)));
-        edges.push((1, 3, Edge::new_decision(Metric(10.0, 10.0))));
-        edges.push((1, 4, Edge::new_decision(Metric(99.0, 100.0))));
-        edges.push((2, 5, Edge::new_decision(Metric(2.1, 10.0))));
-        edges.push((2, 6, Edge::new_decision(Metric(20.0, 100.0))));
+        edges.push((1, 3, Edge::new_decision(Metric(11.0, 10.0))));
+        edges.push((1, 4, Edge::new_decision(Metric(100.0, 100.0)))); // <-- optimal
+        edges.push((2, 5, Edge::new_decision(Metric(2.0, 10.0)))); // <-- optimal
+        edges.push((2, 6, Edge::new_decision(Metric(21.0, 100.0))));
 
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph, 0);
+        let (rate, state) = evaluate(&graph, 0);
+        assert_eq!(rate, 0.8153846153846154);
+
+        // we pick 100 per 100s, over 11 per 10s, even though the latter has a higher rate
+        assert_eq!(state[&1].successor, Some(4));
+        // we pick 2 per 10s, over 21 per 100s, even though the latter has a higher rate
+        assert_eq!(state[&2].successor, Some(5));
     }
 
     #[test]
     fn graph1() {
         let mut edges: Vec<(usize, usize, Edge<Metric>)> = vec![];
         edges.push((0, 1, Edge::new_decision(Metric(1.0, 1.0))));
-        edges.push((0, 2, Edge::new_decision(Metric(3.0, 2.0))));
+        edges.push((0, 2, Edge::new_decision(Metric(3.0, 2.0)))); // <-- optimal
         edges.push((0, 3, Edge::new_decision(Metric(2.0, 3.0))));
         edges.push((0, 4, Edge::new_decision(Metric(4.0, 3.0))));
         edges.push((0, 5, Edge::new_decision(Metric(4.0, 3.0))));
@@ -184,7 +208,9 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph, 0);
+        let (rate, state) = evaluate(&graph, 0);
+        assert_eq!(rate, 1.5);
+        assert_eq!(state[&0].successor, Some(2));
     }
 
     #[test]
@@ -198,6 +224,7 @@ mod test {
         let graph: DirectedCsrGraph<usize, (), Edge<Metric>> =
             GraphBuilder::new().edges_with_values(edges).build();
 
-        evaluate(&graph, 0);
+        let (rate, _state) = evaluate(&graph, 0);
+        assert_eq!(rate, 1.1111111111111112);
     }
 }
