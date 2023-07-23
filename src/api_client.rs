@@ -78,15 +78,20 @@ impl ApiClient {
         self.auth_token = Some(token);
     }
 
-    pub async fn register(&self, callsign: &str, faction: &str) -> ApiClientResponse {
-        self.post(
-            "/v2/register",
-            json!({
-                "faction": faction,
-                "symbol": callsign,
-            }),
-        )
-        .await
+    pub async fn register(
+        &self,
+        callsign: &str,
+        faction: &str,
+        email: Option<&str>,
+    ) -> ApiClientResponse {
+        let mut payload = json!({
+            "faction": faction,
+            "symbol": callsign,
+        });
+        if let Some(email) = email {
+            payload["email"] = json!(email);
+        }
+        self.post("/v2/register", payload).await
     }
 
     pub async fn survey(&self, ship_symbol: &str) -> (Vec<Survey>, ShipCooldown) {

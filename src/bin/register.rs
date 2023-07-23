@@ -12,12 +12,18 @@ async fn main() {
 
     let CALLSIGN: String = std::env::var("AGENT_CALLSIGN").expect("AGENT_CALLSIGN must be set");
     let FACTION: String = std::env::var("AGENT_FACTION").expect("AGENT_FACTION must be set");
-    info!("Registering agent '{}' in '{}'...", CALLSIGN, FACTION);
+    let EMAIL: Option<String> = std::env::var("AGENT_EMAIL").ok();
+    info!(
+        "Registering agent '{}' in '{}' with email '{:?}'...",
+        CALLSIGN, FACTION, EMAIL
+    );
 
     let api_client = ApiClient::new();
     let db_client = DatabaseClient::new();
 
-    let resp = api_client.register(&CALLSIGN, &FACTION).await;
+    let resp = api_client
+        .register(&CALLSIGN, &FACTION, EMAIL.as_deref())
+        .await;
     assert!(
         resp.status.is_success(),
         "Failed to register agent: {} {}",

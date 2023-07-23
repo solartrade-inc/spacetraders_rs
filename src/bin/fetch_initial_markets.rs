@@ -38,6 +38,7 @@ async fn main() {
             debug!("Navigating to {}", waypoint.symbol);
             let mut ship_controller = controller.ship_controller(1);
             ship_controller.navigate(&waypoint.symbol).await;
+            ship_controller.sleep_for_navigation().await;
             ship_controller.fetch_market().await;
             ship_controller.refuel().await;
 
@@ -45,7 +46,6 @@ async fn main() {
             debug!("Market: {:?}", market);
         }
     }
-
     // We should now have full info of all markets in the starting system
     // Together we the asteroid fields, we can now start to evalulate our
     // mining and trade routes.
