@@ -5,13 +5,12 @@ After=network.target
 [Service]
 User=root
 Group=root
-ExecStart=/opt/spacetraders_rs/run
+ExecStart=/opt/spacetraders_rs/run 2>&1
+Environment=RUST_LOG=info,spacetraders_rs=debug
 WorkingDirectory=/opt/spacetraders_rs
 Restart=always
 RestartSec=15
-StartLimitIntervalSec=0
 StandardOutput=append:/opt/spacetraders_rs/run.log
-StandardError=append:/opt/spacetraders_rs/run.stderr.log
 
 [Install]
 WantedBy=multi-user.target
