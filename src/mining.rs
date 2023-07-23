@@ -128,14 +128,19 @@ impl MiningExecutor {
                 "start".into()
             }
         } else {
-            panic!("TODO");
+            debug!("Holding cargo: {:?}", ship.cargo);
+            let item = &ship.cargo.inventory[0];
+            if item.units >= 20 {
+                format!("cargo_{}", item.symbol)
+            } else {
+                format!("cargo_{}_stripped", item.symbol)
+            }
         };
         debug!("Mining state: {}", state);
-        
+
         let successor = match state.as_str() {
             "survey_x" => Some("extract_survey_x".into()),
-            "start" => self.graph.state[&state].successor.clone(),
-            _ => panic!("Unexpected state: {}", state),
+            _ => self.graph.state[&state].successor.clone(),
         };
 
         debug!("Successor: {:?}", successor);
@@ -191,6 +196,7 @@ impl MiningController {
             .iter()
             .map(|t| t.symbol.clone())
             .collect();
+        debug!("Mounts: {:?}", ship.mounts);
 
         // 2. load markets
         let mut markets: Vec<Market> = vec![];

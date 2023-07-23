@@ -161,7 +161,7 @@ impl<'a> ShipController<'a> {
 
     pub async fn survey(&mut self) -> Vec<Survey> {
         self.orbit_status("IN_ORBIT").await;
-        
+
         self.sleep_for_cooldown().await;
 
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
@@ -180,6 +180,8 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn extract_survey(&mut self, survey: &Survey) {
+        self.sleep_for_cooldown().await;
+        
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         let (extraction, cooldown, cargo) = self
             .par

@@ -124,8 +124,10 @@ impl ApiClient {
 
     pub async fn extract(&self, ship_symbol: &str, survey: Option<&Survey>) -> (ShipExtraction, ShipCooldown, ShipCargo) {
         let req_body = match survey {
-            Some(survey) => serde_json::to_string(&survey).unwrap(),
-            None => String::from(""),
+            Some(survey) => json!({
+                "survey": survey,
+            }),
+            None => json!({}),
         };
         let resp = self
             .post(&format!("/v2/my/ships/{}/extract", ship_symbol), req_body)
