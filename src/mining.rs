@@ -1,14 +1,14 @@
 use core::panic;
 use std::collections::{HashMap, HashSet};
-
-use crate::decision_tree::{self, evaluate, Edge, Metric};
+use crate::decision_tree::{self, evaluate, Edge, Metric, EdgeType};
 use crate::models::*;
 use crate::{controller::Controller, util};
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
-
 use log::debug;
 use rand::prelude::*;
 use rand::Rng;
+
+const EXPECTED_NUM_EXTRACTS: u32 = 15;
 
 pub struct PreparedGraph {
     pub nodes: HashMap<String, usize>,
@@ -27,8 +27,75 @@ pub struct MiningExecutor {
 impl MiningExecutor {
     async fn run(&mut self) {
         loop {
-            self.step().await;
-            panic!("TODO");
+            self.step().await;            
+        }
+    }
+
+    fn judge(&self, survey: &Survey) -> bool {
+        use graph_builder::DirectedNeighborsWithValues as _;
+    
+        // we are at a transient decision node in the decision tree like survey_x, which leads to extract_survey_x, or discard_survey_x
+        // extract_survey_x is a transient probability node which leads to cargo_{symbol} for each deposit
+
+        // steal the 'extract' duration weight
+        let extract_survey_0_idx = self.graph.nodes["extract_survey_0"];
+        let example_edge = self.graph.graph.out_neighbors_with_values(extract_survey_0_idx).next().unwrap().value;
+        let extract_duration = example_edge.metric.1;
+
+        let (f_b, df_b) = {
+            // extract_survey_x
+            let mut sum = (0.0, 0.0);
+            let mut weight_sum = 0.0;
+            for t in survey.deposits.iter() {
+                let y = format!("cargo_{}", &t.symbol);
+                let edge = Metric(0.0, extract_duration);
+                let edge_weight = 1.0;
+                let (g, dg) = self.graph.state[&y].fx;
+                let f = g + (edge.0 - self.graph.x0 * edge.1);
+                let df = dg - edge.1;
+                sum.0 += f * edge_weight;
+                sum.1 += df * edge_weight;
+                weight_sum += edge_weight;
+            }
+            (sum.0 / weight_sum, sum.1 / weight_sum)
+        };
+        // debug!("fB: {:?} dfB: {:?}", f_b, df_b);
+        debug!(
+            "Survey judge: {:?} cps over {} seconds",
+            self.graph.x0 - f_b / df_b,
+            -df_b
+        );
+
+        let mut successor = None;
+        let (_f_a, _df_a) = {
+            let edges = vec![
+                (Edge::new_repeatable_decision(Metric(0.0, 0.0), EXPECTED_NUM_EXTRACTS), (f_b, df_b)),
+                (Edge::new_decision(Metric(0.0, 0.0)), self.graph.state["finish"].fx),
+            ];
+
+            let mut max = (f64::MIN, f64::MIN);
+            for (idx, &t) in edges.iter().enumerate() {
+                let edge = t.0.metric;
+                let repeats = match t.0.edge_type {
+                    EdgeType::Decision(repeats) => repeats,
+                    _ => panic!(),
+                } as f64;
+                let (g, dg) = t.1;
+                let f = repeats * g + (edge.0 - self.graph.x0 * edge.1);
+                let df = repeats * dg - edge.1;
+                if f > max.0 || f == max.0 && df > max.1 {
+                    max.0 = f;
+                    max.1 = df;
+                    successor = Some(idx);
+                }
+            }
+            max
+        };
+        // debug!("fA: {:?} dfA: {:?} successor: {:?}", fA, dfA, successor);
+        match successor.unwrap() {
+            0 => true,
+            1 => false,
+            _ => panic!(),
         }
     }
 
@@ -37,26 +104,52 @@ impl MiningExecutor {
         let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
         let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
 
-        // map S -> state
+        let surveys: Vec<Survey> = self.par.surveys.entry(self.asteroid_symbol.clone()).or_insert(vec![]).clone();
+        debug!("Surveys: {:?}", surveys);
+        
+        let mut usable_surveys = vec![];
+        for survey in surveys.iter() {
+            let usuable = self.judge(&survey);
+            if usuable {
+                usable_surveys.push(survey);
+            }
+        }
+        // next time we step, we'll start at state cargo_{symbol}, and then corrosponding successor should be generated
+
+        // Work out our current state at the start of the step
         // states: [D]start, [P]extract, [P]survey, [D]cargo_{symbol}, [D]cargo_{symbol}_stripped, [D]survey_{idx}, [P]extract_survey_{idx}, [D]finish
+        let is_cargo_empty = ship.cargo.units == 0;
+        let have_survey = usable_surveys.len() > 0;
 
-        let _is_cargo_empty = ship.cargo.units == 0;
-        let _have_survey = false;
-
-        let state: String = if ship.cargo.units == 0 {
-            "start".into()
+        let state: String = if is_cargo_empty {
+            if have_survey {
+                "survey_x".into()
+            } else {
+                "start".into()
+            }
         } else {
             panic!("TODO");
         };
         debug!("Mining state: {}", state);
-        let successor = &self.graph.state[&state].successor;
+        
+        let successor = match state.as_str() {
+            "survey_x" => Some("extract_survey_x".into()),
+            "start" => self.graph.state[&state].successor.clone(),
+            _ => panic!("Unexpected state: {}", state),
+        };
+
         debug!("Successor: {:?}", successor);
         match &successor.as_ref().map(|s| s.as_str()) {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(self.ship_idx);
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.survey().await;
-            }
+            },
+            Some("extract_survey_x") => {
+                let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                ship_controller.navigate(&self.asteroid_symbol).await;
+                ship_controller.extract_survey(&usable_surveys[0]).await;
+            },
             _ => panic!("Unexpected successor: {:?}", successor),
         };
     }
@@ -296,7 +389,7 @@ impl MiningController {
             edges.push((
                 survey_node.clone(),
                 extract_survey_node.clone(),
-                Edge::new_repeatable_decision(Metric(0.0, 0.0), 15),
+                Edge::new_repeatable_decision(Metric(0.0, 0.0), EXPECTED_NUM_EXTRACTS),
             ));
             for deposit in survey.iter() {
                 edges.push((

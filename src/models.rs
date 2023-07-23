@@ -172,6 +172,21 @@ pub struct ShipCooldown {
     pub expiration: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShipExtraction {
+    pub ship_symbol: String,
+    #[serde(rename = "yield")]
+    pub _yield: ShipExtractionYield,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct ShipExtractionYield {
+    pub symbol: String,
+    pub units: u32,
+}
+
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -184,5 +199,11 @@ mod test {
         let surveys: Vec<Survey> = serde_json::from_value(body["data"]["surveys"].take()).unwrap();
         assert_eq!(surveys.len(), 1);
         assert_eq!(surveys[0].deposits.len(), 6);
+
+        let serialized: String = serde_json::to_string(&surveys[0]).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"signature":"X1-JK96-45265A-FE9FBF","symbol":"X1-JK96-45265A","deposits":[{"symbol":"AMMONIA_ICE"},{"symbol":"AMMONIA_ICE"},{"symbol":"AMMONIA_ICE"},{"symbol":"ALUMINUM_ORE"},{"symbol":"SILICON_CRYSTALS"},{"symbol":"AMMONIA_ICE"}],"expiration":"2023-07-22T12:41:45.322Z","size":"SMALL"}"#
+        );
     }
 }

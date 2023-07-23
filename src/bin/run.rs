@@ -16,9 +16,9 @@ async fn main() {
     // refetch agent + ships
     let _ = controller.api_client.fetch_agent().await;
     let _ = controller.api_client.fetch_contracts(1, 20).await;
-    let _ = controller.fetch_ships(1, 20).await;
+    controller.fetch_ships(1, 20).await;
 
-    // control our command frigate
+    // control a ship
     let mut ship_controller = controller.ship_controller(3);
     ship_controller.flight_mode("CRUISE").await;
 

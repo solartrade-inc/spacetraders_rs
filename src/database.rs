@@ -132,4 +132,22 @@ impl DatabaseClient {
             .await
             .unwrap();
     }
+
+    pub async fn load_surveys(&self, state: i32) -> Vec<Survey> {
+        let mut conn = self.db.get().await.unwrap();
+        let rows: Vec<(String, Value, chrono::NaiveDateTime, chrono::NaiveDateTime)> =
+            surveys::table
+                .select((
+                    surveys::asteroid_symbol,
+                    surveys::survey,
+                    surveys::expires_at,
+                    surveys::updated_at,
+                ))
+                .filter(surveys::extract_state.eq(&state))
+                .filter(surveys::expires_at.gt(diesel::dsl::now))
+                .load(&mut conn)
+                .await
+                .unwrap();
+        rows.into_iter().map(|r| serde_json::from_value(r.1).unwrap()).collect()
+    }
 }

@@ -102,6 +102,9 @@ impl ApiClient {
             resp.status,
             resp.body
         );
+        // 409 Conflict
+        // {"error":{"message":"Ship action is still on cooldown for 18 second(s).","code":4000,"data":{"cooldown":{"shipSymbol":"SOLARTRADE_INC-3","totalSeconds":70,"remainingSeconds":18,"expiration":"2023-07-23T13:22:33.774Z"}}}}
+
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let surveys: Vec<Survey> = serde_json::from_value(body["data"]["surveys"].take())
             .unwrap_or_else(|e| {
@@ -117,6 +120,46 @@ impl ApiClient {
                 panic!();
             });
         (surveys, cooldown)
+    }
+
+    pub async fn extract(&self, ship_symbol: &str, survey: Option<&Survey>) -> (ShipExtraction, ShipCooldown, ShipCargo) {
+        let req_body = match survey {
+            Some(survey) => serde_json::to_string(&survey).unwrap(),
+            None => String::from(""),
+        };
+        let resp = self
+            .post(&format!("/v2/my/ships/{}/extract", ship_symbol), req_body)
+            .await;
+        assert!(
+            resp.status.is_success(),
+            "Failed to extract: {} {}",
+            resp.status,
+            resp.body
+        );
+        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+        let cooldown: ShipCooldown = serde_json::from_value(body["data"]["cooldown"].take())
+            .unwrap_or_else(|e| {
+                error!(
+                    "Decode error: '{}' while parsing cooldown\n{}",
+                    e, resp.body
+                );
+                panic!();
+            });
+        let cargo: ShipCargo = serde_json::from_value(body["data"]["cargo"].take()).unwrap_or_else(
+            |e| {
+                error!("Decode error: '{}' while parsing cargo\n{}", e, resp.body);
+                panic!();
+            },
+        );
+        let extraction: ShipExtraction = serde_json::from_value(body["data"]["extraction"].take())
+            .unwrap_or_else(|e| {
+                error!(
+                    "Decode error: '{}' while parsing extraction\n{}",
+                    e, resp.body
+                );
+                panic!();
+            });
+        (extraction, cooldown, cargo)
     }
 
     pub async fn fetch_agent(&self) {
