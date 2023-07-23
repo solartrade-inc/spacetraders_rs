@@ -1,0 +1,17 @@
+[Unit]
+Description=SpaceTraders RS
+After=network.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/opt/spacetraders_rs/run
+WorkingDirectory=/opt/spacetraders_rs
+Restart=always
+RestartSec=15
+StartLimitIntervalSec=0
+StandardOutput=append:/opt/spacetraders_rs/run.log
+StandardError=append:/opt/spacetraders_rs/run.stderr.log
+
+[Install]
+WantedBy=multi-user.target
