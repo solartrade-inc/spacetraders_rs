@@ -130,7 +130,7 @@ impl MiningExecutor {
         } else {
             debug!("Holding cargo: {:?}", ship.cargo);
             let item = &ship.cargo.inventory[0];
-            if item.units >= 20 {
+            if item.units >= 20 { // @@ should be tied to mining laser strength
                 format!("cargo_{}", item.symbol)
             } else {
                 format!("cargo_{}_stripped", item.symbol)
@@ -316,6 +316,7 @@ impl MiningController {
 
             // sell
             for market in markets.iter() {
+                let sell_node = format!("sell_{}", market.symbol);
                 let sell_price = market
                     .trade_goods
                     .iter()
@@ -332,15 +333,21 @@ impl MiningController {
                     }
                     edges.push((
                         cargo_node.clone(),
-                        "finish".into(),
+                        sell_node.clone(),
                         Edge::new_decision(Metric(profit, duration)),
                     ));
                     edges.push((
                         cargo_node_stripped.clone(),
-                        "finish".into(),
+                        sell_node.clone(),
                         Edge::new_decision(Metric(profit_stripped, duration)),
                     ));
                 }
+                // mark sell_node as a terminal node
+                edges.push((
+                    sell_node,
+                    "finish".into(),
+                    Edge::new_decision(Metric(0.0, 0.0)),
+                ));
             }
         }
 
