@@ -4,6 +4,7 @@ use crate::diesel::OptionalExtension as _;
 use crate::models::Market;
 use crate::models::Survey;
 
+use crate::models::WrappedSurvey;
 use crate::schema::*;
 use diesel::QueryDsl as _;
 use diesel_async::pooled_connection::deadpool::Pool;
@@ -110,7 +111,7 @@ impl DatabaseClient {
         serde_json::from_value(row.unwrap().market).unwrap()
     }
 
-    pub async fn insert_surveys(&self, surveys: &Vec<Survey>) {
+    pub async fn insert_surveys(&self, surveys: &Vec<Survey>) -> Vec<WrappedSurvey> {
         let mut conn = self.db.get().await.unwrap();
         let inserts = surveys
             .iter()
@@ -126,28 +127,59 @@ impl DatabaseClient {
                 )
             })
             .collect::<Vec<_>>();
-        diesel::insert_into(surveys::table)
+        let rows: Vec<(i64, Value)> = diesel::insert_into(surveys::table)
             .values(inserts)
+            .returning((surveys::id, surveys::survey))
+            .load(&mut conn)
+            .await
+            .unwrap();
+        rows.into_iter()
+            .map(|r| WrappedSurvey {
+                id: r.0,
+                survey: serde_json::from_value(r.1).unwrap(),
+            })
+            .collect()
+    }
+
+    pub async fn load_surveys(&self, state: i32) -> Vec<WrappedSurvey> {
+        let mut conn = self.db.get().await.unwrap();
+        let rows: Vec<(
+            i64,
+            String,
+            Value,
+            chrono::NaiveDateTime,
+            chrono::NaiveDateTime,
+        )> = surveys::table
+            .select((
+                surveys::id,
+                surveys::asteroid_symbol,
+                surveys::survey,
+                surveys::expires_at,
+                surveys::updated_at,
+            ))
+            .filter(surveys::extract_state.eq(&state))
+            .filter(surveys::expires_at.gt(diesel::dsl::now))
+            .load(&mut conn)
+            .await
+            .unwrap();
+        rows.into_iter()
+            .map(|r| WrappedSurvey {
+                id: r.0,
+                survey: serde_json::from_value(r.2).unwrap(),
+            })
+            .collect()
+    }
+
+    pub async fn update_survey_state(&self, survey: &WrappedSurvey, state: i32) {
+        let mut conn = self.db.get().await.unwrap();
+        diesel::update(surveys::table)
+            .filter(surveys::id.eq(survey.id))
+            .set((
+                surveys::updated_at.eq(diesel::dsl::now),
+                surveys::extract_state.eq(state),
+            ))
             .execute(&mut conn)
             .await
             .unwrap();
-    }
-
-    pub async fn load_surveys(&self, state: i32) -> Vec<Survey> {
-        let mut conn = self.db.get().await.unwrap();
-        let rows: Vec<(String, Value, chrono::NaiveDateTime, chrono::NaiveDateTime)> =
-            surveys::table
-                .select((
-                    surveys::asteroid_symbol,
-                    surveys::survey,
-                    surveys::expires_at,
-                    surveys::updated_at,
-                ))
-                .filter(surveys::extract_state.eq(&state))
-                .filter(surveys::expires_at.gt(diesel::dsl::now))
-                .load(&mut conn)
-                .await
-                .unwrap();
-        rows.into_iter().map(|r| serde_json::from_value(r.1).unwrap()).collect()
     }
 }

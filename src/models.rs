@@ -163,6 +163,17 @@ pub struct Survey {
     pub size: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct WrappedSurvey {
+    pub id: i64,
+    pub survey: Survey,
+}
+impl WrappedSurvey {
+    pub fn inner(&self) -> &Survey {
+        &self.survey
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShipCooldown {
@@ -186,6 +197,25 @@ pub struct ShipExtractionYield {
     pub units: u32,
 }
 
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketTransaction {
+    pub waypoint_symbol: String,
+    pub ship_symbol: String,
+    pub trade_symbol: String,
+    #[serde(rename = "type")]
+    pub _type: String,
+    pub units: u32,
+    pub price_per_unit: u32,
+    pub total_price: u32,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct ApiError {
+    pub message: String,
+    pub code: u16,
+}
 
 #[cfg(test)]
 mod test {

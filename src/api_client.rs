@@ -55,9 +55,6 @@ impl ApiClient {
     async fn post<T: ToString>(&self, path: &str, payload: T) -> ApiClientResponse {
         self.req(Method::POST, path, payload).await
     }
-    async fn delete(&self, path: &str) -> ApiClientResponse {
-        self.req(Method::DELETE, path, "").await
-    }
 
     async fn req<T: ToString>(&self, method: Method, path: &str, payload: T) -> ApiClientResponse {
         debug!("{} {}", method, path);
@@ -108,13 +105,16 @@ impl ApiClient {
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let surveys: Vec<Survey> = serde_json::from_value(body["data"]["surveys"].take())
             .unwrap_or_else(|e| {
-                error!("Decode error: '{}' while parsing surveys\n{}", e, resp.body);
+                error!(
+                    "Deserialization error: '{}' while parsing surveys\n{}",
+                    e, resp.body
+                );
                 panic!();
             });
         let cooldown: ShipCooldown = serde_json::from_value(body["data"]["cooldown"].take())
             .unwrap_or_else(|e| {
                 error!(
-                    "Decode error: '{}' while parsing cooldown\n{}",
+                    "Deserialization error: '{}' while parsing cooldown\n{}",
                     e, resp.body
                 );
                 panic!();
@@ -122,7 +122,11 @@ impl ApiClient {
         (surveys, cooldown)
     }
 
-    pub async fn extract(&self, ship_symbol: &str, survey: Option<&Survey>) -> (ShipExtraction, ShipCooldown, ShipCargo) {
+    pub async fn extract(
+        &self,
+        ship_symbol: &str,
+        survey: Option<&Survey>,
+    ) -> Result<(ShipExtraction, ShipCooldown, ShipCargo), ApiError> {
         let req_body = match survey {
             Some(survey) => json!({
                 "survey": survey,
@@ -132,36 +136,53 @@ impl ApiClient {
         let resp = self
             .post(&format!("/v2/my/ships/{}/extract", ship_symbol), req_body)
             .await;
-        assert!(
-            resp.status.is_success(),
-            "Failed to extract: {} {}",
-            resp.status,
-            resp.body
-        );
-        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
-        let cooldown: ShipCooldown = serde_json::from_value(body["data"]["cooldown"].take())
-            .unwrap_or_else(|e| {
-                error!(
-                    "Decode error: '{}' while parsing cooldown\n{}",
-                    e, resp.body
-                );
-                panic!();
-            });
-        let cargo: ShipCargo = serde_json::from_value(body["data"]["cargo"].take()).unwrap_or_else(
-            |e| {
-                error!("Decode error: '{}' while parsing cargo\n{}", e, resp.body);
-                panic!();
-            },
-        );
-        let extraction: ShipExtraction = serde_json::from_value(body["data"]["extraction"].take())
-            .unwrap_or_else(|e| {
-                error!(
-                    "Decode error: '{}' while parsing extraction\n{}",
-                    e, resp.body
-                );
-                panic!();
-            });
-        (extraction, cooldown, cargo)
+
+        match resp.status.as_u16() {
+            200..=299 => {
+                let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+                let cooldown: ShipCooldown =
+                    serde_json::from_value(body["data"]["cooldown"].take()).unwrap_or_else(|e| {
+                        error!(
+                            "Deserialization error: '{}' while parsing cooldown\n{}",
+                            e, resp.body
+                        );
+                        panic!();
+                    });
+                let cargo: ShipCargo = serde_json::from_value(body["data"]["cargo"].take())
+                    .unwrap_or_else(|e| {
+                        error!(
+                            "Deserialization error: '{}' while parsing cargo\n{}",
+                            e, resp.body
+                        );
+                        panic!();
+                    });
+                let extraction: ShipExtraction =
+                    serde_json::from_value(body["data"]["extraction"].take()).unwrap_or_else(|e| {
+                        error!(
+                            "Deserialization error: '{}' while parsing extraction\n{}",
+                            e, resp.body
+                        );
+                        panic!();
+                    });
+                Ok((extraction, cooldown, cargo))
+            }
+            409 => {
+                // 409 Conflict {"error":{"message":"Ship extract failed. Survey X1-JK96-45265A-AF05A7 has been exhausted.","code":4224}}
+                let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+                let error: ApiError =
+                    serde_json::from_value(body["error"].take()).unwrap_or_else(|e| {
+                        error!(
+                            "Deserialization error: '{}' while parsing error\n{}",
+                            e, resp.body
+                        );
+                        panic!();
+                    });
+                Err(error)
+            }
+            _ => {
+                panic!("Failed to extract: {} {}", resp.status, resp.body);
+            }
+        }
     }
 
     pub async fn fetch_agent(&self) {
@@ -197,7 +218,10 @@ impl ApiClient {
             resp.body
         );
         let ships: List<Ship> = serde_json::from_str(&resp.body).unwrap_or_else(|e| {
-            error!("Decode error: '{}' while parsing ships\n{}", e, resp.body);
+            error!(
+                "Deserialization error: '{}' while parsing ships\n{}",
+                e, resp.body
+            );
             panic!();
         });
         ships
@@ -220,7 +244,7 @@ impl ApiClient {
         );
         let waypoints: List<Waypoint> = serde_json::from_str(&resp.body).unwrap_or_else(|e| {
             error!(
-                "Decode error: '{}' while parsing system waypoints\n{}",
+                "Deserialization error: '{}' while parsing system waypoints\n{}",
                 e, resp.body
             );
             panic!();
@@ -247,7 +271,10 @@ impl ApiClient {
             resp.body
         );
         let nav: Data<ShipNav> = serde_json::from_str(&resp.body).unwrap_or_else(|e| {
-            error!("Decode error: '{}' while parsing nav\n{}", e, resp.body);
+            error!(
+                "Deserialization error: '{}' while parsing nav\n{}",
+                e, resp.body
+            );
             panic!();
         });
         nav.data
@@ -265,7 +292,10 @@ impl ApiClient {
         );
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let nav: ShipNav = serde_json::from_value(body["data"]["nav"].take()).unwrap_or_else(|e| {
-            error!("Decode error: '{}' while parsing nav\n{}", e, resp.body);
+            error!(
+                "Deserialization error: '{}' while parsing nav\n{}",
+                e, resp.body
+            );
             panic!();
         });
         nav
@@ -283,7 +313,10 @@ impl ApiClient {
         );
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let nav: ShipNav = serde_json::from_value(body["data"]["nav"].take()).unwrap_or_else(|e| {
-            error!("Decode error: '{}' while parsing nav\n{}", e, resp.body);
+            error!(
+                "Deserialization error: '{}' while parsing nav\n{}",
+                e, resp.body
+            );
             panic!();
         });
         nav
@@ -306,12 +339,18 @@ impl ApiClient {
         );
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let nav: ShipNav = serde_json::from_value(body["data"]["nav"].take()).unwrap_or_else(|e| {
-            error!("Decode error: '{}' while parsing nav\n{}", e, resp.body);
+            error!(
+                "Deserialization error: '{}' while parsing nav\n{}",
+                e, resp.body
+            );
             panic!();
         });
         let fuel: ShipFuel =
             serde_json::from_value(body["data"]["fuel"].take()).unwrap_or_else(|e| {
-                error!("Decode error: '{}' while parsing fuel\n{}", e, resp.body);
+                error!(
+                    "Deserialization error: '{}' while parsing fuel\n{}",
+                    e, resp.body
+                );
                 panic!();
             });
         (nav, fuel)
@@ -335,15 +374,70 @@ impl ApiClient {
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let agent: Agent =
             serde_json::from_value(body["data"]["agent"].take()).unwrap_or_else(|e| {
-                error!("Decode error: '{}' while parsing agent\n{}", e, resp.body);
+                error!(
+                    "Deserialization error: '{}' while parsing agent\n{}",
+                    e, resp.body
+                );
                 panic!();
             });
         let fuel: ShipFuel =
             serde_json::from_value(body["data"]["fuel"].take()).unwrap_or_else(|e| {
-                error!("Decode error: '{}' while parsing fuel\n{}", e, resp.body);
+                error!(
+                    "Deserialization error: '{}' while parsing fuel\n{}",
+                    e, resp.body
+                );
                 panic!();
             });
         (agent, fuel)
+    }
+
+    pub async fn sell(
+        &self,
+        ship_symbol: &str,
+        symbol: &str,
+        units: u32,
+    ) -> (Agent, ShipCargo, MarketTransaction) {
+        let resp = self
+            .post(
+                &format!("/v2/my/ships/{}/sell", ship_symbol),
+                json!({
+                    "symbol": symbol,
+                    "units": units,
+                }),
+            )
+            .await;
+        assert!(
+            resp.status.is_success(),
+            "Failed to sell: {} {}",
+            resp.status,
+            resp.body
+        );
+        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+        let agent: Agent =
+            serde_json::from_value(body["data"]["agent"].take()).unwrap_or_else(|e| {
+                error!(
+                    "Deserialization error: '{}' while parsing agent\n{}",
+                    e, resp.body
+                );
+                panic!();
+            });
+        let cargo: ShipCargo =
+            serde_json::from_value(body["data"]["cargo"].take()).unwrap_or_else(|e| {
+                error!(
+                    "Deserialization error: '{}' while parsing cargo\n{}",
+                    e, resp.body
+                );
+                panic!();
+            });
+        let transaction: MarketTransaction =
+            serde_json::from_value(body["data"]["transaction"].take()).unwrap_or_else(|e| {
+                error!(
+                    "Deserialization error: '{}' while parsing transaction\n{}",
+                    e, resp.body
+                );
+                panic!();
+            });
+        (agent, cargo, transaction)
     }
 
     pub async fn fetch_market(&self, system: &str, waypoint: &str) -> Market {
@@ -357,7 +451,10 @@ impl ApiClient {
         );
         let mut body: Value = serde_json::from_str(&resp.body).unwrap();
         let market: Market = serde_json::from_value(body["data"].take()).unwrap_or_else(|e| {
-            error!("Decode error: '{}' while parsing market\n{}", e, resp.body);
+            error!(
+                "Deserialization error: '{}' while parsing market\n{}",
+                e, resp.body
+            );
             panic!();
         });
         market

@@ -1,14 +1,15 @@
-use core::panic;
-use std::collections::{HashMap, HashSet};
-use crate::decision_tree::{self, evaluate, Edge, Metric, EdgeType};
+use crate::decision_tree::{self, evaluate, Edge, EdgeType, Metric};
 use crate::models::*;
 use crate::{controller::Controller, util};
+use core::panic;
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use log::debug;
 use rand::prelude::*;
 use rand::Rng;
+use regex::Regex;
+use std::collections::{HashMap, HashSet};
 
-const EXPECTED_NUM_EXTRACTS: u32 = 15;
+const EXPECTED_NUM_EXTRACTS: u32 = 10;
 
 pub struct PreparedGraph {
     pub nodes: HashMap<String, usize>,
@@ -27,19 +28,25 @@ pub struct MiningExecutor {
 impl MiningExecutor {
     async fn run(&mut self) {
         loop {
-            self.step().await;            
+            self.step().await;
         }
     }
 
     fn judge(&self, survey: &Survey) -> bool {
         use graph_builder::DirectedNeighborsWithValues as _;
-    
+
         // we are at a transient decision node in the decision tree like survey_x, which leads to extract_survey_x, or discard_survey_x
         // extract_survey_x is a transient probability node which leads to cargo_{symbol} for each deposit
 
         // steal the 'extract' duration weight
         let extract_survey_0_idx = self.graph.nodes["extract_survey_0"];
-        let example_edge = self.graph.graph.out_neighbors_with_values(extract_survey_0_idx).next().unwrap().value;
+        let example_edge = self
+            .graph
+            .graph
+            .out_neighbors_with_values(extract_survey_0_idx)
+            .next()
+            .unwrap()
+            .value;
         let extract_duration = example_edge.metric.1;
 
         let (f_b, df_b) = {
@@ -69,8 +76,14 @@ impl MiningExecutor {
         let mut successor = None;
         let (_f_a, _df_a) = {
             let edges = vec![
-                (Edge::new_repeatable_decision(Metric(0.0, 0.0), EXPECTED_NUM_EXTRACTS), (f_b, df_b)),
-                (Edge::new_decision(Metric(0.0, 0.0)), self.graph.state["finish"].fx),
+                (
+                    Edge::new_repeatable_decision(Metric(0.0, 0.0), EXPECTED_NUM_EXTRACTS),
+                    (f_b, df_b),
+                ),
+                (
+                    Edge::new_decision(Metric(0.0, 0.0)),
+                    self.graph.state["finish"].fx,
+                ),
             ];
 
             let mut max = (f64::MIN, f64::MIN);
@@ -104,25 +117,29 @@ impl MiningExecutor {
         let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
         let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
 
-        let surveys: Vec<Survey> = self.par.surveys.entry(self.asteroid_symbol.clone()).or_insert(vec![]).clone();
-        debug!("Surveys: {:?}", surveys);
-        
-        let mut usable_surveys = vec![];
-        for survey in surveys.iter() {
-            let usuable = self.judge(&survey);
-            if usuable {
-                usable_surveys.push(survey);
-            }
-        }
-        // next time we step, we'll start at state cargo_{symbol}, and then corrosponding successor should be generated
-
         // Work out our current state at the start of the step
-        // states: [D]start, [P]extract, [P]survey, [D]cargo_{symbol}, [D]cargo_{symbol}_stripped, [D]survey_{idx}, [P]extract_survey_{idx}, [D]finish
         let is_cargo_empty = ship.cargo.units == 0;
-        let have_survey = usable_surveys.len() > 0;
+        let mut usable_surveys = vec![];
 
         let state: String = if is_cargo_empty {
-            if have_survey {
+            let surveys: Vec<WrappedSurvey> = self
+                .par
+                .surveys
+                .entry(self.asteroid_symbol.clone())
+                .or_insert(vec![])
+                .clone();
+            for survey in surveys.iter() {
+                let usuable = self.judge(&survey.inner());
+                if usuable {
+                    usable_surveys.push(survey.clone());
+                }
+            }
+            debug!(
+                "Surveys: {} usuable of {}",
+                usable_surveys.len(),
+                surveys.len()
+            );
+            if usable_surveys.len() != 0 {
                 "survey_x".into()
             } else {
                 "start".into()
@@ -130,7 +147,8 @@ impl MiningExecutor {
         } else {
             debug!("Holding cargo: {:?}", ship.cargo);
             let item = &ship.cargo.inventory[0];
-            if item.units >= 20 { // @@ should be tied to mining laser strength
+            if item.units >= 20 {
+                // @@ should be tied to mining laser strength
                 format!("cargo_{}", item.symbol)
             } else {
                 format!("cargo_{}_stripped", item.symbol)
@@ -148,14 +166,35 @@ impl MiningExecutor {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(self.ship_idx);
                 ship_controller.navigate(&self.asteroid_symbol).await;
+                ship_controller.sleep_for_navigation().await;
                 ship_controller.survey().await;
-            },
+            }
             Some("extract_survey_x") => {
                 let mut ship_controller = self.par.ship_controller(self.ship_idx);
                 ship_controller.navigate(&self.asteroid_symbol).await;
+                ship_controller.sleep_for_navigation().await;
                 ship_controller.extract_survey(&usable_surveys[0]).await;
-            },
-            _ => panic!("Unexpected successor: {:?}", successor),
+            }
+            Some(s) => {
+                lazy_static::lazy_static!(
+                    static ref SELL_REGEX: Regex = Regex::new(r"^sell_(?P<market>.+)$").unwrap();
+                    static ref CARGO_REGEX: Regex = Regex::new(r"^cargo_(?P<symbol>.+)$").unwrap();
+                );
+                // check if s matches sell regex:
+                if let Some(captures) = SELL_REGEX.captures(s) {
+                    let market_symbol = captures.name("market").unwrap().as_str();
+                    let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                    ship_controller.navigate(&market_symbol).await;
+                    ship_controller.sleep_for_navigation().await;
+                    let item = &ship.cargo.inventory[0];
+                    ship_controller.sell(&item.symbol, item.units).await;
+                } else {
+                    panic!("Unexpected successor: {:?}", successor);
+                }
+            }
+            None => {
+                panic!("Unexpected successor: {:?}", successor);
+            }
         };
     }
 }
@@ -279,7 +318,7 @@ impl MiningController {
                 surveyors.push((mount.strength.unwrap(), intersection));
             }
         }
-        let surveys_per_operation = surveyors.iter().map(|(s, _)| *s).sum::<u32>();
+        let surveys_per_operation = surveyors.iter().map(|(strength, _)| *strength).sum::<u32>();
 
         edges.push((
             "start".into(),
@@ -490,11 +529,13 @@ fn asteroid_yields(traits: &Vec<String>) -> HashMap<&'static str, usize> {
 lazy_static::lazy_static! {
     static ref BASE_DEPOSITS: Vec<String> = vec!["QUARTZ_SAND".into(), "SILICON_CRYSTALS".into(), "PRECIOUS_STONES".into(), "ICE_WATER".into(), "AMMONIA_ICE".into(), "IRON_ORE".into(), "COPPER_ORE".into(), "SILVER_ORE".into(), "ALUMINUM_ORE".into(), "GOLD_ORE".into(), "PLATINUM_ORE".into()];
 
-    static ref MOUNT_SURVEYOR_I: ShipMount = ShipMount { symbol: "MOUNT_SURVEYOR_I".into(), strength: Some(1),
+    static ref MOUNT_SURVEYOR_I: ShipMount = ShipMount {
+        symbol: "MOUNT_SURVEYOR_I".into(), strength: Some(1),
         deposits: Some(BASE_DEPOSITS.clone()),
         requirements: ShipMountRequirements { power: 1, crew: 2, slots: None } };
     static ref MOUNT_SURVEYOR_II: ShipMount = {
-        let mut surveyor = ShipMount { symbol: "MOUNT_SURVEYOR_II".into(), strength: Some(2),
+        let mut surveyor = ShipMount {
+            symbol: "MOUNT_SURVEYOR_II".into(), strength: Some(2),
             deposits: Some(BASE_DEPOSITS.clone()),
             requirements: ShipMountRequirements { power: 4, crew: 3, slots: None } };
         surveyor.deposits.as_mut().unwrap().push("DIAMONDS".into());
@@ -502,7 +543,8 @@ lazy_static::lazy_static! {
         surveyor
     };
     static ref MOUNT_SURVEYOR_III: ShipMount = {
-        let mut surveyor = ShipMount { symbol: "MOUNT_SURVEYOR_III".into(), strength: Some(3),
+        let mut surveyor = ShipMount {
+            symbol: "MOUNT_SURVEYOR_III".into(), strength: Some(3),
             deposits: Some(BASE_DEPOSITS.clone()),
             requirements: ShipMountRequirements { power: 7, crew: 5, slots: None } };
         surveyor.deposits.as_mut().unwrap().push("DIAMONDS".into());

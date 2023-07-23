@@ -20,14 +20,15 @@ impl ControllerBuilder {
 
         let agent = db_client.load_agent(&self.callsign).await;
         let surveys_list = db_client.load_surveys(0).await;
-        let surveys: HashMap<String, Vec<Survey>> = surveys_list
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, survey| {
-                let e = acc.entry(survey.symbol.clone()).or_insert(vec![]);
-                e.push(survey);
-                acc
-            });
-                
+        let surveys: HashMap<String, Vec<WrappedSurvey>> =
+            surveys_list
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, survey| {
+                    let e = acc.entry(survey.inner().symbol.clone()).or_insert(vec![]);
+                    e.push(survey);
+                    acc
+                });
+
         api_client.set_auth_token(agent.bearer_token.clone());
 
         Controller {
@@ -49,7 +50,7 @@ pub struct Controller {
     pub ships: HashMap<String, Ship>,
     pub markets: HashMap<String, Market>,
     pub agent: db_models::Agent,
-    pub surveys: HashMap<String, Vec<Survey>>,
+    pub surveys: HashMap<String, Vec<WrappedSurvey>>,
 }
 
 impl Controller {
@@ -89,19 +90,29 @@ impl<'a> ShipController<'a> {
         self.par.ships.get(&self.symbol).unwrap()
     }
 
-    pub async fn sleep_for_navigation(&mut self) {  
-        let ship = self.par.ships.get(&self.symbol).unwrap();      
-        let duration = (ship.nav.route.arrival - Utc::now()).to_std().unwrap();
-        debug!("Sleeping for navigation {}s", duration.as_millis() as f64 / 1000.0);
-        tokio::time::sleep(duration).await;
+    pub async fn sleep_for_navigation(&mut self) {
+        let ship = self.par.ships.get(&self.symbol).unwrap();
+        // OutOfRangeError on negative duration
+        if let Ok(duration) = (ship.nav.route.arrival - Utc::now()).to_std() {
+            debug!(
+                "Sleeping for navigation {}s",
+                duration.as_millis() as f64 / 1000.0
+            );
+            tokio::time::sleep(duration).await;
+        }
     }
 
     pub async fn sleep_for_cooldown(&mut self) {
         let ship = self.par.ships.get(&self.symbol).unwrap();
         if let Some(cooldown) = &ship.cooldown {
-            let duration = (cooldown.expiration - Utc::now()).to_std().unwrap();
-            debug!("Sleeping for cooldown {}s", duration.as_millis() as f64 / 1000.0);
-            tokio::time::sleep(duration).await;
+            // OutOfRangeError on negative duration
+            if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
+                debug!(
+                    "Sleeping for cooldown {}s",
+                    duration.as_millis() as f64 / 1000.0
+                );
+                tokio::time::sleep(duration).await;
+            }
         }
     }
 
@@ -138,8 +149,6 @@ impl<'a> ShipController<'a> {
         let (nav, fuel) = self.par.api_client.navigate(&self.symbol, target).await;
         ship.nav = nav;
         ship.fuel = fuel;
-
-        self.sleep_for_navigation().await;
     }
 
     pub async fn fetch_market(&mut self) -> Market {
@@ -167,30 +176,45 @@ impl<'a> ShipController<'a> {
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
         ship.cooldown = Some(cooldown);
-        self.par.db_client.insert_surveys(&surveys).await;
 
+        let wrapped: Vec<WrappedSurvey> = self.par.db_client.insert_surveys(&surveys).await;
         let e = self
             .par
             .surveys
             .entry(ship.nav.waypoint_symbol.clone())
             .or_insert(vec![]);
-        e.extend(surveys.clone());
+        e.extend(wrapped.clone());
 
         surveys
     }
 
-    pub async fn extract_survey(&mut self, survey: &Survey) {
+    pub async fn extract_survey(&mut self, survey: &WrappedSurvey) {
         self.sleep_for_cooldown().await;
-        
+
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
-        let (extraction, cooldown, cargo) = self
+        let extract_result = self
             .par
             .api_client
-            .extract(&ship.symbol, Some(survey))
+            .extract(&ship.symbol, Some(survey.inner()))
             .await;
-        debug!("Extracted {}x {}", extraction._yield.units, extraction._yield.symbol);
-        ship.cooldown = Some(cooldown);
-        ship.cargo = cargo;
+        match extract_result {
+            Ok((extraction, cooldown, cargo)) => {
+                debug!(
+                    "Extracted {}x {}",
+                    extraction._yield.units, extraction._yield.symbol
+                );
+                ship.cooldown = Some(cooldown);
+                ship.cargo = cargo;
+            }
+            Err(e) => {
+                debug!("Extraction failed: {:?}", e);
+                if e.code == 4224 {
+                    // depleted survey
+                    debug!("Survey depleted, removing from database");
+                    self.par.db_client.update_survey_state(&survey, 2).await;
+                }
+            }
+        }
     }
 
     pub async fn refuel(&mut self) {
@@ -206,5 +230,15 @@ impl<'a> ShipController<'a> {
         let ship = self.par.ships.get_mut(&self.symbol).unwrap();
         ship.fuel = fuel;
         debug!("Updated fuel: {:?}", ship.fuel.current);
+    }
+
+    pub async fn sell(&mut self, symbol: &str, units: u32) {
+        self.orbit_status("DOCKED").await;
+        let (_agent, cargo, t) = self.par.api_client.sell(&self.symbol, symbol, units).await;
+        debug!("Sold {}x {}: +${}", t.units, t.trade_symbol, t.total_price);
+
+        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        ship.cargo = cargo;
+        debug!("Updated cargo: {:?}", ship.cargo);
     }
 }
