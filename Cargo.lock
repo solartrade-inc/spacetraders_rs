@@ -1517,6 +1517,7 @@ name = "spacetraders_rs"
 version = "0.2.0"
 dependencies = [
  "chrono",
+ "dashmap",
  "diesel",
  "diesel-async",
  "dotenvy",

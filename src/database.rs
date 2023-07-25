@@ -1,9 +1,9 @@
-use crate::db_models::Agent;
+use crate::db_models;
 use crate::diesel::ExpressionMethods;
 use crate::diesel::OptionalExtension as _;
+use crate::models::Agent;
 use crate::models::Market;
 use crate::models::Survey;
-
 use crate::models::WrappedSurvey;
 use crate::schema::*;
 use diesel::QueryDsl as _;
@@ -17,6 +17,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::env;
 
+#[derive(Clone)]
 pub struct DatabaseClient {
     pub db: Pool<AsyncPgConnection>,
 }
@@ -31,9 +32,9 @@ impl DatabaseClient {
         Self { db: db_pool }
     }
 
-    pub async fn load_agent(&self, callsign: &str) -> Agent {
+    pub async fn load_agent(&self, callsign: &str) -> (String, Agent) {
         let mut conn = self.db.get().await.unwrap();
-        let agent: Option<Agent> = agents::table
+        let agent: db_models::Agent = agents::table
             .select((
                 agents::symbol,
                 agents::bearer_token,
@@ -45,8 +46,12 @@ impl DatabaseClient {
             .first(&mut conn)
             .await
             .optional()
-            .unwrap();
-        agent.unwrap()
+            .unwrap()
+            .expect("Agent not found");
+        (
+            agent.bearer_token,
+            serde_json::from_value(agent.agent).unwrap(),
+        )
     }
 
     pub async fn save_agent(&self, callsign: &str, token: &str, agent: &Value) {

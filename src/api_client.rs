@@ -8,6 +8,7 @@ use log::*;
 use serde_json::json;
 use serde_json::Value;
 
+#[derive(Debug, Clone)]
 pub struct ApiClient {
     inner: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
     base_url: &'static str,

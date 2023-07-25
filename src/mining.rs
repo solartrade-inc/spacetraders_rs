@@ -224,6 +224,7 @@ impl MiningController {
 
         // 1. load asteroid
         let ship_system = ship.nav.system_symbol.clone();
+        // @@ should read waypoints from memory, not from api
         let waypoints = self
             .par
             .api_client

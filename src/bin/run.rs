@@ -3,7 +3,7 @@ use log::*;
 
 use spacetraders_rs::{controller::Controller, mining::MiningController, util};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     dotenv().ok();
     pretty_env_logger::init_timed();
@@ -13,29 +13,32 @@ async fn main() {
     let callsign: String = std::env::var("AGENT_CALLSIGN").expect("AGENT_CALLSIGN must be set");
     let mut controller = Controller::new(&callsign).load().await;
 
-    // refetch agent + ships
-    let _ = controller.api_client.fetch_agent().await;
-    let _ = controller.api_client.fetch_contracts(1, 20).await;
+    // refetch ships
     controller.fetch_ships(1, 20).await;
 
-    // control a ship
-    let mut ship_controller = controller.ship_controller(3);
-    ship_controller.flight_mode("CRUISE").await;
-
-    let ship_system = ship_controller.ship().nav.system_symbol.clone();
+    let system_symbol = util::system_symbol(&controller.agent.headquarters);
     let waypoints = controller
         .api_client
-        .fetch_system_waypoints(&ship_system)
+        .fetch_system_waypoints(&system_symbol)
         .await;
-    debug!("Waypoints: {:?}", waypoints);
-
     let asteroid = waypoints.iter().find(|w| util::is_asteroid(w)).unwrap();
+
+    // 3,4,5,6,7,8 all ore hounds
 
     // call into mining module
     let mining_controller = MiningController {
-        par: controller,
+        par: controller.clone(),
         ship_idx: 3,
         asteroid_symbol: asteroid.symbol.clone(),
     };
-    mining_controller.run().await;
+    let mining_controller_2 = MiningController {
+        par: controller.clone(),
+        ship_idx: 4,
+        asteroid_symbol: asteroid.symbol.clone(),
+    };
+    let fut = vec![
+        tokio::spawn(mining_controller.run()),
+        tokio::spawn(mining_controller_2.run()),
+    ];
+    futures::future::join_all(fut).await;
 }

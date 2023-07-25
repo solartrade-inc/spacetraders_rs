@@ -1,14 +1,12 @@
-use core::panic;
-use std::collections::HashMap;
+use std::{sync::Arc, collections::HashMap};
 
 use crate::api_client::ApiClient;
 use crate::database::DatabaseClient;
-use crate::db_models;
 use crate::models::*;
-
 use chrono::Utc;
-
 use log::debug;
+use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, OwnedRwLockReadGuard, RwLockWriteGuard};
+use dashmap::DashMap;
 
 pub struct ControllerBuilder {
     callsign: String,
@@ -18,40 +16,49 @@ impl ControllerBuilder {
         let mut api_client = ApiClient::new();
         let db_client = DatabaseClient::new();
 
-        let agent = db_client.load_agent(&self.callsign).await;
-        let surveys_list = db_client.load_surveys(0).await;
-        let surveys: HashMap<String, Vec<WrappedSurvey>> =
-            surveys_list
-                .into_iter()
-                .fold(HashMap::new(), |mut acc, survey| {
-                    let e = acc.entry(survey.inner().symbol.clone()).or_insert(vec![]);
-                    e.push(survey);
-                    acc
-                });
+        // load agent
+        let (bearer_token, agent) = db_client.load_agent(&self.callsign).await;
 
-        api_client.set_auth_token(agent.bearer_token.clone());
+        // load surveys
+        let surveys_list = db_client.load_surveys(0).await;
+        let surveys: DashMap<String, Vec<Arc<WrappedSurvey>>> = DashMap::new();
+        for survey in surveys_list.into_iter() {
+            surveys
+                .entry(survey.inner().symbol.clone())
+                .or_insert(vec![])
+                .push(Arc::new(survey));
+        }
+
+        // todo: load ships
+
+        api_client.set_auth_token(bearer_token.clone());
 
         Controller {
             api_client,
             db_client,
-            agent,
-            ships: HashMap::new(),
-            markets: HashMap::new(),
-            surveys: surveys,
+            agent: Arc::new(agent),
+            ships: Arc::new(DashMap::new()),
+            markets: Arc::new(DashMap::new()),
+            surveys: Arc::new(surveys),
         }
     }
 }
 
+#[derive(Clone)]
 pub struct Controller {
+    // clients
     pub api_client: ApiClient,
     pub db_client: DatabaseClient,
 
     // universe
-    pub ships: HashMap<String, Ship>,
-    pub markets: HashMap<String, Market>,
-    pub agent: db_models::Agent,
-    pub surveys: HashMap<String, Vec<WrappedSurvey>>,
+    // double lock: first lock is for the map, second lock is for the ship
+    pub ships: Arc<DashMap<String, Arc<AsyncRwLock<Ship>>>>,
+    
+    pub markets: Arc<DashMap<String, Arc<Market>>>,
+    pub agent: Arc<Agent>,
+    pub surveys: Arc<DashMap<String, Vec<Arc<WrappedSurvey>>>>,
 }
+
 
 impl Controller {
     pub fn new(callsign: &str) -> ControllerBuilder {
@@ -65,33 +72,38 @@ impl Controller {
 
         // info!("Ships: {:?}", ships);
         for ship in ships.data.into_iter() {
-            self.ships.insert(ship.symbol.clone(), ship);
+            self.ships.insert(ship.symbol.clone(), Arc::new(AsyncRwLock::new(ship)));
         }
     }
 
-    pub fn ship_controller(&mut self, idx: usize) -> ShipController {
+    pub fn ship_controller(&self, idx: usize) -> ShipController {
         // convert idx+1 to hex
         let ship_symbol = format!("{}-{:x}", self.agent.symbol, idx);
-        let _ship = self.ships.get(&ship_symbol).unwrap();
+        let ship_arc = self.ships.get(&ship_symbol).unwrap();
         ShipController {
             symbol: ship_symbol,
-            par: self,
+            par: self.clone(),
+            ship_arc: ship_arc.clone(),
         }
     }
 }
 
-pub struct ShipController<'a> {
+pub struct ShipController {
     symbol: String,
-    pub par: &'a mut Controller,
+    pub par: Controller,
+    ship_arc: Arc<AsyncRwLock<Ship>>,
 }
 
-impl<'a> ShipController<'a> {
-    pub fn ship(&self) -> &Ship {
-        self.par.ships.get(&self.symbol).unwrap()
+impl ShipController {
+    pub async fn ship(&self) -> RwLockReadGuard<Ship> {
+        self.ship_arc.read().await
+    }
+    pub async fn ship_mut(&self) -> RwLockWriteGuard<Ship> {
+        self.ship_arc.write().await
     }
 
-    pub async fn sleep_for_navigation(&mut self) {
-        let ship = self.par.ships.get(&self.symbol).unwrap();
+    pub async fn sleep_for_navigation(&self) {
+        let ship = self.ship().await;
         // OutOfRangeError on negative duration
         if let Ok(duration) = (ship.nav.route.arrival - Utc::now()).to_std() {
             debug!(
@@ -102,8 +114,8 @@ impl<'a> ShipController<'a> {
         }
     }
 
-    pub async fn sleep_for_cooldown(&mut self) {
-        let ship = self.par.ships.get(&self.symbol).unwrap();
+    pub async fn sleep_for_cooldown(&self) {
+        let ship = self.ship().await;
         if let Some(cooldown) = &ship.cooldown {
             // OutOfRangeError on negative duration
             if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
@@ -117,7 +129,7 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn flight_mode(&mut self, target: &str) {
-        let mut ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         if ship.nav.flight_mode == target {
             return;
         }
@@ -126,7 +138,7 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn orbit_status(&mut self, target: &str) {
-        let mut ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         if ship.nav.status == target {
             return;
         }
@@ -142,7 +154,7 @@ impl<'a> ShipController<'a> {
 
     pub async fn navigate(&mut self, target: &str) {
         self.orbit_status("IN_ORBIT").await;
-        let mut ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         if ship.nav.waypoint_symbol == target {
             return;
         }
@@ -152,7 +164,7 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn fetch_market(&mut self) -> Market {
-        let ship = self.par.ships.get(&self.symbol).unwrap();
+        let ship = self.ship().await;
         // fetch
         let market = self
             .par
@@ -164,34 +176,31 @@ impl<'a> ShipController<'a> {
         // update memory
         self.par
             .markets
-            .insert(market.symbol.clone(), market.clone());
+            .insert(market.symbol.clone(), Arc::new(market.clone()));
         market
     }
 
-    pub async fn survey(&mut self) -> Vec<Survey> {
+    pub async fn survey(&mut self) {
         self.orbit_status("IN_ORBIT").await;
 
         self.sleep_for_cooldown().await;
-
-        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
         ship.cooldown = Some(cooldown);
 
         let wrapped: Vec<WrappedSurvey> = self.par.db_client.insert_surveys(&surveys).await;
-        let e = self
+        let mut e = self
             .par
             .surveys
             .entry(ship.nav.waypoint_symbol.clone())
             .or_insert(vec![]);
-        e.extend(wrapped.clone());
-
-        surveys
+        e.extend(wrapped.into_iter().map(|s| Arc::new(s)));
     }
 
     pub async fn extract_survey(&mut self, survey: &WrappedSurvey) {
         self.sleep_for_cooldown().await;
 
-        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         let extract_result = self
             .par
             .api_client
@@ -224,16 +233,17 @@ impl<'a> ShipController<'a> {
     }
 
     pub async fn refuel(&mut self) {
-        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let ship = self.ship_mut().await;
         let refuel_units = (ship.fuel.capacity - ship.fuel.current) / 100 * 100;
         if refuel_units == 0 {
             return;
         }
         debug!("Refuel: {} units", refuel_units);
+        drop(ship);
         self.orbit_status("DOCKED").await;
         let (_agent, fuel) = self.par.api_client.refuel(&self.symbol, refuel_units).await;
 
-        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         ship.fuel = fuel;
         debug!("Updated fuel: {:?}", ship.fuel.current);
     }
@@ -243,7 +253,7 @@ impl<'a> ShipController<'a> {
         let (_agent, cargo, t) = self.par.api_client.sell(&self.symbol, symbol, units).await;
         debug!("Sold {}x {}: +${}", t.units, t.trade_symbol, t.total_price);
 
-        let ship = self.par.ships.get_mut(&self.symbol).unwrap();
+        let mut ship = self.ship_mut().await;
         ship.cargo = cargo;
         debug!("Updated cargo: {:?}", ship.cargo);
     }
