@@ -1,17 +1,15 @@
 use crate::models::*;
-
 use hyper::Method;
 use hyper::Request;
 use hyper::Uri;
 use log::*;
-
 use serde_json::json;
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct ApiClient {
     inner: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
-    base_url: &'static str,
+    base_url: String,
     auth_token: Option<String>,
 }
 
@@ -25,9 +23,12 @@ impl ApiClient {
     pub fn new() -> Self {
         let https = hyper_tls::HttpsConnector::new();
         let client = hyper::Client::builder().build::<_, hyper::Body>(https);
+        let base_url = std::env::var("SPACETRADERS_API_URL").unwrap_or_else(|_| {
+            panic!("SPACETRADERS_API_URL must be set");
+        });
         Self {
             inner: client,
-            base_url: "https://api.spacetraders.io",
+            base_url: base_url,
             auth_token: None,
         }
     }

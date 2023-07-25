@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::api_client::ApiClient;
 use crate::database::DatabaseClient;
 use crate::models::*;
-use chrono::{Utc};
+use chrono::Utc;
 use std::time::Duration;
 use dashmap::DashMap;
 use log::debug;
