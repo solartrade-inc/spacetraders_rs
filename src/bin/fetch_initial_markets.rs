@@ -21,10 +21,10 @@ async fn main() {
     controller.fetch_ships(1, 20).await;
 
     // grab our command frigate, and send it to all the marketplaces in the starting system
-    let mut ship_controller = controller.ship_controller(1);
+    let ship_symbol = format!("{}-{}", callsign, 1);
+    let mut ship_controller = controller.ship_controller(&ship_symbol);
     ship_controller.flight_mode("CRUISE").await;
-
-    let ship_system = ship_controller.ship().nav.system_symbol.clone();
+    let ship_system = ship_controller.ship().await.nav.system_symbol.clone();
     let waypoints = controller
         .api_client
         .fetch_system_waypoints(&ship_system)
@@ -35,8 +35,8 @@ async fn main() {
 
     for waypoint in waypoints.iter() {
         if util::is_market(waypoint) {
-            debug!("Navigating to {}", waypoint.symbol);
-            let mut ship_controller = controller.ship_controller(1);
+            debug!("Navigating to {}", waypoint.symbol);            
+            let mut ship_controller = controller.ship_controller(&ship_symbol);
             ship_controller.navigate(&waypoint.symbol).await;
             ship_controller.sleep_for_navigation().await;
             ship_controller.fetch_market().await;

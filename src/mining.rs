@@ -2,12 +2,14 @@ use crate::decision_tree::{self, evaluate, Edge, EdgeType, Metric};
 use crate::models::*;
 use crate::{controller::Controller, util};
 use core::panic;
+use std::sync::Arc;
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use log::debug;
 use rand::prelude::*;
 use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, OwnedRwLockReadGuard, RwLockWriteGuard};
 
 const EXPECTED_NUM_EXTRACTS: u32 = 10;
 
@@ -21,7 +23,8 @@ pub struct PreparedGraph {
 
 pub struct MiningExecutor {
     pub par: Controller,
-    pub ship_idx: usize,
+    pub ship_symbol: String,
+    pub ship_arc: Arc<AsyncRwLock<Ship>>,
     pub asteroid_symbol: String,
     pub graph: PreparedGraph,
 }
@@ -114,15 +117,14 @@ impl MiningExecutor {
 
     async fn step(&mut self) {
         // identify mining state
-        let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
-        let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
+        let ship = self.ship_arc.read().await;
 
         // Work out our current state at the start of the step
         let is_cargo_empty = ship.cargo.units == 0;
         let mut usable_surveys = vec![];
 
         let state: String = if is_cargo_empty {
-            let surveys: Vec<WrappedSurvey> = self
+            let surveys: Vec<Arc<WrappedSurvey>> = self
                 .par
                 .surveys
                 .entry(self.asteroid_symbol.clone())
@@ -167,13 +169,13 @@ impl MiningExecutor {
         debug!("Successor: {:?}", successor);
         match &successor.as_ref().map(|s| s.as_str()) {
             Some("survey") => {
-                let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.sleep_for_navigation().await;
                 ship_controller.survey().await;
             }
             Some("extract_survey_x") => {
-                let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.sleep_for_navigation().await;
                 ship_controller.extract_survey(&usable_surveys[0]).await;
@@ -186,7 +188,7 @@ impl MiningExecutor {
                 // check if s matches sell regex:
                 if let Some(captures) = SELL_REGEX.captures(s) {
                     let market_symbol = captures.name("market").unwrap().as_str();
-                    let mut ship_controller = self.par.ship_controller(self.ship_idx);
+                    let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
                     ship_controller.navigate(&market_symbol).await;
                     ship_controller.sleep_for_navigation().await;
                     let item = &ship.cargo.inventory[0];
@@ -204,27 +206,25 @@ impl MiningExecutor {
 
 pub struct MiningController {
     pub par: Controller,
-    pub ship_idx: usize,
+    ship_arc: Arc<AsyncRwLock<Ship>>,
     pub asteroid_symbol: String,
 }
 
 impl MiningController {
-    pub fn new(par: Controller, ship_idx: usize, asteroid_symbol: String) -> Self {
+    pub fn new(par: &Controller, ship_symbol: &str, asteroid_symbol: &str) -> Self {
         Self {
-            par,
-            ship_idx,
-            asteroid_symbol,
+            par: par.clone(),
+            ship_arc: par.ships.get(ship_symbol).unwrap().clone(),
+            asteroid_symbol: asteroid_symbol.into(),
         }
     }
 
     pub async fn run(mut self) {
-        // 0. load ship
-        let ship_symbol = format!("{}-{:x}", self.par.agent.symbol, self.ship_idx);
-        let ship = self.par.ships.get_mut(&ship_symbol).unwrap().clone();
+        let ship = self.ship_arc.read().await;
 
         // 1. load asteroid
         let ship_system = ship.nav.system_symbol.clone();
-        // @@ should read waypoints from memory, not from api
+        // @@ should read systems and waypoints from memory, not from api
         let waypoints = self
             .par
             .api_client
@@ -275,8 +275,9 @@ impl MiningController {
         );
 
         MiningExecutor {
-            par: self.par,
-            ship_idx: self.ship_idx,
+            par: self.par.clone(),
+            ship_symbol: ship.symbol.clone(),
+            ship_arc: self.ship_arc.clone(),
             asteroid_symbol: self.asteroid_symbol.clone(),
             graph: g,
         }

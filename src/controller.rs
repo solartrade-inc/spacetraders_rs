@@ -76,12 +76,10 @@ impl Controller {
         }
     }
 
-    pub fn ship_controller(&self, idx: usize) -> ShipController {
-        // convert idx+1 to hex
-        let ship_symbol = format!("{}-{:x}", self.agent.symbol, idx);
-        let ship_arc = self.ships.get(&ship_symbol).unwrap();
+    pub fn ship_controller(&self, ship_symbol: &str) -> ShipController {
+        let ship_arc = self.ships.get(ship_symbol).unwrap();
         ShipController {
-            symbol: ship_symbol,
+            symbol: ship_symbol.to_string(),
             par: self.clone(),
             ship_arc: ship_arc.clone(),
         }

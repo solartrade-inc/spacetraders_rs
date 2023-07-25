@@ -1,7 +1,7 @@
 use dotenvy::dotenv;
 use log::*;
 
-use spacetraders_rs::{controller::Controller, mining::MiningController, util};
+use spacetraders_rs::{controller::Controller, mining::{MiningController, self}, util};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -24,21 +24,12 @@ async fn main() {
     let asteroid = waypoints.iter().find(|w| util::is_asteroid(w)).unwrap();
 
     // 3,4,5,6,7,8 all ore hounds
-
-    // call into mining module
-    let mining_controller = MiningController {
-        par: controller.clone(),
-        ship_idx: 3,
-        asteroid_symbol: asteroid.symbol.clone(),
-    };
-    let mining_controller_2 = MiningController {
-        par: controller.clone(),
-        ship_idx: 4,
-        asteroid_symbol: asteroid.symbol.clone(),
-    };
-    let fut = vec![
-        tokio::spawn(mining_controller.run()),
-        tokio::spawn(mining_controller_2.run()),
-    ];
-    futures::future::join_all(fut).await;
+    let mut futs = vec![];
+    for i in 3..=8 {
+        let ship_symbol = format!("{}-{}", callsign, i);
+        let mining_controller = MiningController::new(&controller, &ship_symbol, &asteroid.symbol);
+        let fut = tokio::spawn(mining_controller.run());
+        futs.push(fut);
+    }
+    futures::future::join_all(futs).await;
 }
