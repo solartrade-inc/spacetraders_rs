@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::api_client::ApiClient;
 use crate::database::DatabaseClient;
 use crate::models::*;
-use chrono::Utc;
+use chrono::{Utc};
+use std::time::Duration;
 use dashmap::DashMap;
 use log::debug;
 use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -94,10 +95,12 @@ pub struct ShipController {
 
 impl ShipController {
     pub async fn ship(&self) -> RwLockReadGuard<Ship> {
-        self.ship_arc.read().await
+        let guard = tokio::time::timeout(Duration::from_secs(5), self.ship_arc.read()).await.expect("Timeout on ship lock");
+        guard
     }
     pub async fn ship_mut(&self) -> RwLockWriteGuard<Ship> {
-        self.ship_arc.write().await
+        let guard = tokio::time::timeout(Duration::from_secs(5), self.ship_arc.write()).await.expect("Timeout on mut ship lock");
+        guard
     }
 
     pub async fn sleep_for_navigation(&self) {
@@ -108,6 +111,7 @@ impl ShipController {
                 "Sleeping for navigation {}s",
                 duration.as_millis() as f64 / 1000.0
             );
+            drop(ship);
             tokio::time::sleep(duration).await;
         }
     }
@@ -121,12 +125,13 @@ impl ShipController {
                     "Sleeping for cooldown {}s",
                     duration.as_millis() as f64 / 1000.0
                 );
+                drop(ship);
                 tokio::time::sleep(duration).await;
             }
         }
     }
 
-    pub async fn flight_mode(&mut self, target: &str) {
+    pub async fn flight_mode(&self, target: &str) {
         let mut ship = self.ship_mut().await;
         if ship.nav.flight_mode == target {
             return;
@@ -135,7 +140,7 @@ impl ShipController {
         ship.nav = self.par.api_client.flight_mode(&self.symbol, target).await;
     }
 
-    pub async fn orbit_status(&mut self, target: &str) {
+    pub async fn orbit_status(&self, target: &str) {
         let mut ship = self.ship_mut().await;
         if ship.nav.status == target {
             return;
@@ -150,7 +155,7 @@ impl ShipController {
         assert_eq!(ship.nav.status, target);
     }
 
-    pub async fn navigate(&mut self, target: &str) {
+    pub async fn navigate(&self, target: &str) {
         self.orbit_status("IN_ORBIT").await;
         let mut ship = self.ship_mut().await;
         if ship.nav.waypoint_symbol == target {
@@ -161,7 +166,7 @@ impl ShipController {
         ship.fuel = fuel;
     }
 
-    pub async fn fetch_market(&mut self) -> Market {
+    pub async fn fetch_market(&self) -> Market {
         let ship = self.ship().await;
         // fetch
         let market = self
@@ -178,10 +183,10 @@ impl ShipController {
         market
     }
 
-    pub async fn survey(&mut self) {
+    pub async fn survey(&self) {
         self.orbit_status("IN_ORBIT").await;
-
         self.sleep_for_cooldown().await;
+    
         let mut ship = self.ship_mut().await;
         let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
         ship.cooldown = Some(cooldown);
@@ -195,7 +200,7 @@ impl ShipController {
         e.extend(wrapped.into_iter().map(Arc::new));
     }
 
-    pub async fn extract_survey(&mut self, survey: &WrappedSurvey) {
+    pub async fn extract_survey(&self, survey: &WrappedSurvey) {
         self.sleep_for_cooldown().await;
 
         let mut ship = self.ship_mut().await;
@@ -230,7 +235,7 @@ impl ShipController {
         }
     }
 
-    pub async fn refuel(&mut self) {
+    pub async fn refuel(&self) {
         let ship = self.ship_mut().await;
         let refuel_units = (ship.fuel.capacity - ship.fuel.current) / 100 * 100;
         if refuel_units == 0 {
@@ -246,7 +251,7 @@ impl ShipController {
         debug!("Updated fuel: {:?}", ship.fuel.current);
     }
 
-    pub async fn sell(&mut self, symbol: &str, units: u32) {
+    pub async fn sell(&self, symbol: &str, units: u32) {
         self.orbit_status("DOCKED").await;
         let (_agent, cargo, t) = self.par.api_client.sell(&self.symbol, symbol, units).await;
         debug!("Sold {}x {}: +${}", t.units, t.trade_symbol, t.total_price);

@@ -29,7 +29,7 @@ pub struct MiningExecutor {
     pub graph: PreparedGraph,
 }
 impl MiningExecutor {
-    async fn run(&mut self) {
+    async fn run(&self) {
         loop {
             self.step().await;
         }
@@ -115,7 +115,7 @@ impl MiningExecutor {
         }
     }
 
-    async fn step(&mut self) {
+    async fn step(&self) {
         // identify mining state
         let ship = self.ship_arc.read().await;
 
@@ -165,17 +165,22 @@ impl MiningExecutor {
             "survey_x" => Some("extract_survey_x".into()),
             _ => self.graph.state[&state].successor.clone(),
         };
+        drop(ship);
 
         debug!("Successor: {:?}", successor);
         match &successor.as_deref() {
             Some("survey") => {
-                let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
+                let ship_controller = self.par.ship_controller(&self.ship_symbol);
+                debug!("Navigating to asteroid...");
                 ship_controller.navigate(&self.asteroid_symbol).await;
+                debug!("Sleeping for navigation...");
                 ship_controller.sleep_for_navigation().await;
+                debug!("Surveying...");
                 ship_controller.survey().await;
+                debug!("Surveying done.");
             }
             Some("extract_survey_x") => {
-                let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
+                let ship_controller = self.par.ship_controller(&self.ship_symbol);
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.sleep_for_navigation().await;
                 ship_controller.extract_survey(&usable_surveys[0]).await;
@@ -188,10 +193,12 @@ impl MiningExecutor {
                 // check if s matches sell regex:
                 if let Some(captures) = SELL_REGEX.captures(s) {
                     let market_symbol = captures.name("market").unwrap().as_str();
-                    let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
+                    let ship_controller = self.par.ship_controller(&self.ship_symbol);
                     ship_controller.navigate(market_symbol).await;
                     ship_controller.sleep_for_navigation().await;
-                    let item = &ship.cargo.inventory[0];
+                    let ship = self.ship_arc.read().await;
+                    let item = ship.cargo.inventory[0].clone();
+                    drop(ship);
                     ship_controller.sell(&item.symbol, item.units).await;
                 } else {
                     panic!("Unexpected successor: {:?}", successor);
@@ -274,14 +281,15 @@ impl MiningController {
             -g.state["survey"].fx.1
         );
 
-        MiningExecutor {
+        let e = MiningExecutor {
             par: self.par.clone(),
             ship_symbol: ship.symbol.clone(),
             ship_arc: self.ship_arc.clone(),
             asteroid_symbol: self.asteroid_symbol.clone(),
             graph: g,
-        }
-        .run()
+        };
+        drop(ship);
+        e.run()
         .await;
     }
 

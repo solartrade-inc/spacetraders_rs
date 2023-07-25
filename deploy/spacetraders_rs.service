@@ -7,6 +7,7 @@ User=root
 Group=root
 ExecStart=/opt/spacetraders_rs/run 2>&1
 Environment=RUST_LOG=info,spacetraders_rs=debug
+Environment=RUST_BACKTRACE=1
 WorkingDirectory=/opt/spacetraders_rs
 Restart=always
 RestartSec=15
