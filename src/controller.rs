@@ -1,12 +1,12 @@
-use std::{sync::Arc, collections::HashMap};
+use std::sync::Arc;
 
 use crate::api_client::ApiClient;
 use crate::database::DatabaseClient;
 use crate::models::*;
 use chrono::Utc;
-use log::debug;
-use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, OwnedRwLockReadGuard, RwLockWriteGuard};
 use dashmap::DashMap;
+use log::debug;
+use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub struct ControllerBuilder {
     callsign: String,
@@ -53,12 +53,11 @@ pub struct Controller {
     // universe
     // double lock: first lock is for the map, second lock is for the ship
     pub ships: Arc<DashMap<String, Arc<AsyncRwLock<Ship>>>>,
-    
+
     pub markets: Arc<DashMap<String, Arc<Market>>>,
     pub agent: Arc<Agent>,
     pub surveys: Arc<DashMap<String, Vec<Arc<WrappedSurvey>>>>,
 }
-
 
 impl Controller {
     pub fn new(callsign: &str) -> ControllerBuilder {
@@ -72,7 +71,8 @@ impl Controller {
 
         // info!("Ships: {:?}", ships);
         for ship in ships.data.into_iter() {
-            self.ships.insert(ship.symbol.clone(), Arc::new(AsyncRwLock::new(ship)));
+            self.ships
+                .insert(ship.symbol.clone(), Arc::new(AsyncRwLock::new(ship)));
         }
     }
 
@@ -192,7 +192,7 @@ impl ShipController {
             .surveys
             .entry(ship.nav.waypoint_symbol.clone())
             .or_insert(vec![]);
-        e.extend(wrapped.into_iter().map(|s| Arc::new(s)));
+        e.extend(wrapped.into_iter().map(Arc::new));
     }
 
     pub async fn extract_survey(&mut self, survey: &WrappedSurvey) {
@@ -218,7 +218,7 @@ impl ShipController {
                 if e.code == 4224 || e.code == 4221 {
                     // depleted survey or expired survey
                     debug!("Removing from database");
-                    self.par.db_client.update_survey_state(&survey, 2).await;
+                    self.par.db_client.update_survey_state(survey, 2).await;
                     // remove from self.par.surveys as well
                     self.par
                         .surveys

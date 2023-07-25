@@ -2,14 +2,14 @@ use crate::decision_tree::{self, evaluate, Edge, EdgeType, Metric};
 use crate::models::*;
 use crate::{controller::Controller, util};
 use core::panic;
-use std::sync::Arc;
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use log::debug;
 use rand::prelude::*;
 use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, OwnedRwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
+use tokio::sync::RwLock as AsyncRwLock;
 
 const EXPECTED_NUM_EXTRACTS: u32 = 10;
 
@@ -134,7 +134,7 @@ impl MiningExecutor {
                 if survey.inner().expiration < chrono::Utc::now() {
                     continue;
                 }
-                let usuable = self.judge(&survey.inner());
+                let usuable = self.judge(survey.inner());
                 if usuable {
                     usable_surveys.push(survey.clone());
                 }
@@ -144,7 +144,7 @@ impl MiningExecutor {
                 usable_surveys.len(),
                 surveys.len()
             );
-            if usable_surveys.len() != 0 {
+            if !usable_surveys.is_empty() {
                 "survey_x".into()
             } else {
                 "start".into()
@@ -167,7 +167,7 @@ impl MiningExecutor {
         };
 
         debug!("Successor: {:?}", successor);
-        match &successor.as_ref().map(|s| s.as_str()) {
+        match &successor.as_deref() {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
                 ship_controller.navigate(&self.asteroid_symbol).await;
@@ -189,7 +189,7 @@ impl MiningExecutor {
                 if let Some(captures) = SELL_REGEX.captures(s) {
                     let market_symbol = captures.name("market").unwrap().as_str();
                     let mut ship_controller = self.par.ship_controller(&self.ship_symbol);
-                    ship_controller.navigate(&market_symbol).await;
+                    ship_controller.navigate(market_symbol).await;
                     ship_controller.sleep_for_navigation().await;
                     let item = &ship.cargo.inventory[0];
                     ship_controller.sell(&item.symbol, item.units).await;
@@ -219,7 +219,7 @@ impl MiningController {
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         let ship = self.ship_arc.read().await;
 
         // 1. load asteroid

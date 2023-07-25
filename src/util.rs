@@ -10,7 +10,7 @@ pub fn is_asteroid(waypoint: &Waypoint) -> bool {
 
 pub fn system_symbol(waypoint_symbol: &str) -> String {
     waypoint_symbol
-        .split("-")
+        .split('-')
         .take(2)
         .collect::<Vec<&str>>()
         .join("-")

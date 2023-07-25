@@ -1,7 +1,7 @@
 use dotenvy::dotenv;
 use log::*;
 
-use spacetraders_rs::{controller::Controller, mining::{MiningController, self}, util};
+use spacetraders_rs::{controller::Controller, mining::MiningController, util};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {

@@ -35,7 +35,7 @@ async fn main() {
 
     for waypoint in waypoints.iter() {
         if util::is_market(waypoint) {
-            debug!("Navigating to {}", waypoint.symbol);            
+            debug!("Navigating to {}", waypoint.symbol);
             let mut ship_controller = controller.ship_controller(&ship_symbol);
             ship_controller.navigate(&waypoint.symbol).await;
             ship_controller.sleep_for_navigation().await;
