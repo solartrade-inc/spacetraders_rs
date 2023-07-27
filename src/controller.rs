@@ -4,10 +4,10 @@ use crate::api_client::ApiClient;
 use crate::database::DatabaseClient;
 use crate::models::*;
 use chrono::Utc;
-use std::time::Duration;
 use dashmap::DashMap;
 use log::debug;
-use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::Duration;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock as AsyncRwLock};
 
 pub struct ControllerBuilder {
     callsign: String,
@@ -77,12 +77,15 @@ impl Controller {
         }
     }
 
-    pub fn ship_controller(&self, ship_symbol: &str) -> ShipController {
-        let ship_arc = self.ships.get(ship_symbol).unwrap();
+    pub async fn ship_controller(&self, ship_symbol: &str) -> ShipController {
+        let ship_arc = self.ships.get(ship_symbol).unwrap().clone();
+        let guard = tokio::time::timeout(Duration::from_secs(5), ship_arc.write_owned())
+            .await
+            .expect("Timeout on mut ship lock");
         ShipController {
             symbol: ship_symbol.to_string(),
             par: self.clone(),
-            ship_arc: ship_arc.clone(),
+            ship: guard,
         }
     }
 }
@@ -90,89 +93,73 @@ impl Controller {
 pub struct ShipController {
     symbol: String,
     pub par: Controller,
-    ship_arc: Arc<AsyncRwLock<Ship>>,
+    pub ship: OwnedRwLockWriteGuard<Ship>,
 }
 
 impl ShipController {
-    pub async fn ship(&self) -> RwLockReadGuard<Ship> {
-        let guard = tokio::time::timeout(Duration::from_secs(5), self.ship_arc.read()).await.expect("Timeout on ship lock");
-        guard
-    }
-    pub async fn ship_mut(&self) -> RwLockWriteGuard<Ship> {
-        let guard = tokio::time::timeout(Duration::from_secs(5), self.ship_arc.write()).await.expect("Timeout on mut ship lock");
-        guard
-    }
-
-    pub async fn sleep_for_navigation(&self) {
-        let ship = self.ship().await;
+    pub async fn sleep_for_navigation(&mut self) {
         // OutOfRangeError on negative duration
-        if let Ok(duration) = (ship.nav.route.arrival - Utc::now()).to_std() {
+        if let Ok(duration) = (self.ship.nav.route.arrival - Utc::now()).to_std() {
             debug!(
                 "Sleeping for navigation {}s",
                 duration.as_millis() as f64 / 1000.0
             );
-            drop(ship);
             tokio::time::sleep(duration).await;
+            // update ship nav?
         }
     }
 
-    pub async fn sleep_for_cooldown(&self) {
-        let ship = self.ship().await;
-        if let Some(cooldown) = &ship.cooldown {
+    pub async fn sleep_for_cooldown(&mut self) {
+        if let Some(cooldown) = &self.ship.cooldown {
             // OutOfRangeError on negative duration
             if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
                 debug!(
                     "Sleeping for cooldown {}s",
                     duration.as_millis() as f64 / 1000.0
                 );
-                drop(ship);
                 tokio::time::sleep(duration).await;
             }
         }
     }
 
-    pub async fn flight_mode(&self, target: &str) {
-        let mut ship = self.ship_mut().await;
-        if ship.nav.flight_mode == target {
+    pub async fn flight_mode(&mut self, target: &str) {
+        if self.ship.nav.flight_mode == target {
             return;
         }
-        debug!("Flight mode: {} -> {}", ship.nav.flight_mode, target);
-        ship.nav = self.par.api_client.flight_mode(&self.symbol, target).await;
+        debug!("Flight mode: {} -> {}", self.ship.nav.flight_mode, target);
+        self.ship.nav = self.par.api_client.flight_mode(&self.symbol, target).await;
     }
 
-    pub async fn orbit_status(&self, target: &str) {
-        let mut ship = self.ship_mut().await;
-        if ship.nav.status == target {
+    pub async fn orbit_status(&mut self, target: &str) {
+        if self.ship.nav.status == target {
             return;
         }
-        debug!("Orbit status: {} -> {}", ship.nav.status, target);
+        debug!("Orbit status: {} -> {}", self.ship.nav.status, target);
         let nav = match target {
             "IN_ORBIT" => self.par.api_client.orbit(&self.symbol).await,
             "DOCKED" => self.par.api_client.dock(&self.symbol).await,
             _ => panic!("Unknown orbit status: {}", target),
         };
-        ship.nav = nav;
-        assert_eq!(ship.nav.status, target);
+        self.ship.nav = nav;
+        assert_eq!(self.ship.nav.status, target);
     }
 
-    pub async fn navigate(&self, target: &str) {
+    pub async fn navigate(&mut self, target: &str) {
         self.orbit_status("IN_ORBIT").await;
-        let mut ship = self.ship_mut().await;
-        if ship.nav.waypoint_symbol == target {
+        if self.ship.nav.waypoint_symbol == target {
             return;
         }
         let (nav, fuel) = self.par.api_client.navigate(&self.symbol, target).await;
-        ship.nav = nav;
-        ship.fuel = fuel;
+        self.ship.nav = nav;
+        self.ship.fuel = fuel;
     }
 
     pub async fn fetch_market(&self) -> Market {
-        let ship = self.ship().await;
         // fetch
         let market = self
             .par
             .api_client
-            .fetch_market(&ship.nav.system_symbol, &ship.nav.waypoint_symbol)
+            .fetch_market(&self.ship.nav.system_symbol, &self.ship.nav.waypoint_symbol)
             .await;
         // update database
         self.par.db_client.upsert_market(&market).await;
@@ -183,31 +170,29 @@ impl ShipController {
         market
     }
 
-    pub async fn survey(&self) {
+    pub async fn survey(&mut self) {
         self.orbit_status("IN_ORBIT").await;
         self.sleep_for_cooldown().await;
-    
-        let mut ship = self.ship_mut().await;
-        let (surveys, cooldown) = self.par.api_client.survey(&ship.symbol).await;
-        ship.cooldown = Some(cooldown);
+
+        let (surveys, cooldown) = self.par.api_client.survey(&self.ship.symbol).await;
+        self.ship.cooldown = Some(cooldown);
 
         let wrapped: Vec<WrappedSurvey> = self.par.db_client.insert_surveys(&surveys).await;
         let mut e = self
             .par
             .surveys
-            .entry(ship.nav.waypoint_symbol.clone())
+            .entry(self.ship.nav.waypoint_symbol.clone())
             .or_insert(vec![]);
         e.extend(wrapped.into_iter().map(Arc::new));
     }
 
-    pub async fn extract_survey(&self, survey: &WrappedSurvey) {
+    pub async fn extract_survey(&mut self, survey: &WrappedSurvey) {
         self.sleep_for_cooldown().await;
 
-        let mut ship = self.ship_mut().await;
         let extract_result = self
             .par
             .api_client
-            .extract(&ship.symbol, Some(survey.inner()))
+            .extract(&self.ship.symbol, Some(survey.inner()))
             .await;
         match extract_result {
             Ok((extraction, cooldown, cargo)) => {
@@ -215,8 +200,8 @@ impl ShipController {
                     "Extracted {}x {}",
                     extraction._yield.units, extraction._yield.symbol
                 );
-                ship.cooldown = Some(cooldown);
-                ship.cargo = cargo;
+                self.ship.cooldown = Some(cooldown);
+                self.ship.cargo = cargo;
             }
             Err(e) => {
                 debug!("Extraction failed: {:?}", e);
@@ -227,7 +212,7 @@ impl ShipController {
                     // remove from self.par.surveys as well
                     self.par
                         .surveys
-                        .entry(ship.nav.waypoint_symbol.clone())
+                        .entry(self.ship.nav.waypoint_symbol.clone())
                         .or_insert(vec![])
                         .retain(|s| s.id != survey.id);
                 }
@@ -235,29 +220,25 @@ impl ShipController {
         }
     }
 
-    pub async fn refuel(&self) {
-        let ship = self.ship_mut().await;
-        let refuel_units = (ship.fuel.capacity - ship.fuel.current) / 100 * 100;
+    pub async fn refuel(&mut self) {
+        let refuel_units = (self.ship.fuel.capacity - self.ship.fuel.current) / 100 * 100;
         if refuel_units == 0 {
             return;
         }
         debug!("Refuel: {} units", refuel_units);
-        drop(ship);
         self.orbit_status("DOCKED").await;
         let (_agent, fuel) = self.par.api_client.refuel(&self.symbol, refuel_units).await;
 
-        let mut ship = self.ship_mut().await;
-        ship.fuel = fuel;
-        debug!("Updated fuel: {:?}", ship.fuel.current);
+        self.ship.fuel = fuel;
+        debug!("Updated fuel: {:?}", self.ship.fuel.current);
     }
 
-    pub async fn sell(&self, symbol: &str, units: u32) {
+    pub async fn sell(&mut self, symbol: &str, units: u32) {
         self.orbit_status("DOCKED").await;
         let (_agent, cargo, t) = self.par.api_client.sell(&self.symbol, symbol, units).await;
         debug!("Sold {}x {}: +${}", t.units, t.trade_symbol, t.total_price);
 
-        let mut ship = self.ship_mut().await;
-        ship.cargo = cargo;
-        debug!("Updated cargo: {:?}", ship.cargo);
+        self.ship.cargo = cargo;
+        debug!("Updated cargo: {:?}", self.ship.cargo);
     }
 }

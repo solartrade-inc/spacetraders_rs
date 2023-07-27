@@ -170,7 +170,7 @@ impl MiningExecutor {
         debug!("Successor: {:?}", successor);
         match &successor.as_deref() {
             Some("survey") => {
-                let ship_controller = self.par.ship_controller(&self.ship_symbol);
+                let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                 debug!("Navigating to asteroid...");
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 debug!("Sleeping for navigation...");
@@ -180,7 +180,7 @@ impl MiningExecutor {
                 debug!("Surveying done.");
             }
             Some("extract_survey_x") => {
-                let ship_controller = self.par.ship_controller(&self.ship_symbol);
+                let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.sleep_for_navigation().await;
                 ship_controller.extract_survey(&usable_surveys[0]).await;
@@ -193,7 +193,7 @@ impl MiningExecutor {
                 // check if s matches sell regex:
                 if let Some(captures) = SELL_REGEX.captures(s) {
                     let market_symbol = captures.name("market").unwrap().as_str();
-                    let ship_controller = self.par.ship_controller(&self.ship_symbol);
+                    let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                     ship_controller.navigate(market_symbol).await;
                     ship_controller.sleep_for_navigation().await;
                     let ship = self.ship_arc.read().await;
@@ -289,8 +289,7 @@ impl MiningController {
             graph: g,
         };
         drop(ship);
-        e.run()
-        .await;
+        e.run().await;
     }
 
     pub fn mining_prep(
