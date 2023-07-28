@@ -2,17 +2,18 @@
 extern crate diesel;
 
 // interfaces
-pub mod api_client;
-pub mod database;
+pub mod clients;
+pub use clients::api_client;
+pub use clients::database;
 
 // models
-pub mod db_models;
 pub mod models;
-pub mod schema;
+pub use models::db_models;
+pub use models::schema;
+pub use models::shipconfig;
 
-// logic
 pub mod controller;
-pub mod mining;
+pub mod scripts;
 
 // tools
 pub mod decision_tree;

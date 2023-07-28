@@ -7,7 +7,10 @@ use chrono::Utc;
 use dashmap::DashMap;
 use log::debug;
 use std::time::Duration;
-use tokio::{sync::{OwnedRwLockWriteGuard, RwLock as AsyncRwLock}, time::sleep};
+use tokio::{
+    sync::{OwnedRwLockWriteGuard, RwLock as AsyncRwLock},
+    time::sleep,
+};
 
 pub struct ControllerBuilder {
     callsign: String,
