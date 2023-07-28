@@ -7,7 +7,7 @@ use chrono::Utc;
 use dashmap::DashMap;
 use log::debug;
 use std::time::Duration;
-use tokio::sync::{OwnedRwLockWriteGuard, RwLock as AsyncRwLock};
+use tokio::{sync::{OwnedRwLockWriteGuard, RwLock as AsyncRwLock}, time::sleep};
 
 pub struct ControllerBuilder {
     callsign: String,
@@ -215,6 +215,11 @@ impl ShipController {
                         .entry(self.ship.nav.waypoint_symbol.clone())
                         .or_insert(vec![])
                         .retain(|s| s.id != survey.id);
+                }
+                if e.code == 4000 {
+                    // ship action on cooldown
+                    debug!("Ship action on cooldown.. sleeping for 15s");
+                    sleep(Duration::from_secs(15)).await;
                 }
             }
         }

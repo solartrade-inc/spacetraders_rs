@@ -196,9 +196,7 @@ impl MiningExecutor {
                     let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                     ship_controller.navigate(market_symbol).await;
                     ship_controller.sleep_for_navigation().await;
-                    let ship = self.ship_arc.read().await;
-                    let item = ship.cargo.inventory[0].clone();
-                    drop(ship);
+                    let item = ship_controller.ship.cargo.inventory[0].clone();
                     ship_controller.sell(&item.symbol, item.units).await;
                 } else {
                     panic!("Unexpected successor: {:?}", successor);
