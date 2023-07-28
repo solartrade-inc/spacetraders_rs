@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::api_client::ApiClient;
+use crate::{api_client::ApiClient, shipconfig::AgentConfig};
 use crate::database::DatabaseClient;
 use crate::models::*;
 use chrono::Utc;
@@ -64,9 +64,9 @@ pub struct Controller {
 }
 
 impl Controller {
-    pub fn new(callsign: &str) -> ControllerBuilder {
+    pub fn new(config: &AgentConfig) -> ControllerBuilder {
         ControllerBuilder {
-            callsign: String::from(callsign),
+            callsign: String::from(&config.callsign),
         }
     }
 

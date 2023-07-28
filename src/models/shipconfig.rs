@@ -9,7 +9,8 @@ pub struct AgentConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ShipConfig {
     pub symbol: String,
-    pub module_config: Option<ModuleConfig>,
+    pub shipyard: String,
+    pub module_config: Option<ModulesConfig>,
     pub script: ShipScript,
 }
 
@@ -24,8 +25,18 @@ pub enum ShipScript {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MiningConfig {
-    asteroid_symbol: String,
+    pub asteroid_symbol: String,
+}
+
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ModulesConfig {
+    pub install_location: Option<String>,
+    pub modules: Vec<ModuleConfig>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ModuleConfig {}
+pub struct ModuleConfig {
+    pub module: String,
+    pub source: Option<String>,
+}

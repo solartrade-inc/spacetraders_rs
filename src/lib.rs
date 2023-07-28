@@ -14,6 +14,7 @@ pub use models::shipconfig;
 
 pub mod controller;
 pub mod scripts;
+pub mod runtime;
 
 // tools
 pub mod decision_tree;
