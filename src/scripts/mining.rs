@@ -172,15 +172,23 @@ impl Step for MiningExecutor {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                 ship_controller.navigate(&self.asteroid_symbol).await;
-                ship_controller.sleep_for_navigation().await;
-                ship_controller.sleep_for_cooldown().await;
+                if let Some(cooldown) = ship_controller.navigation_cooldown() {
+                    return Some(cooldown);
+                }
+                if let Some(cooldown) = ship_controller.reactor_cooldown() {
+                    return Some(cooldown);
+                }
                 ship_controller.survey().await;
             }
             Some("extract_survey_x") => {
                 let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                 ship_controller.navigate(&self.asteroid_symbol).await;
-                ship_controller.sleep_for_navigation().await;
-                ship_controller.sleep_for_cooldown().await;
+                if let Some(cooldown) = ship_controller.navigation_cooldown() {
+                    return Some(cooldown);
+                }
+                if let Some(cooldown) = ship_controller.reactor_cooldown() {
+                    return Some(cooldown);
+                }
                 ship_controller.extract_survey(&usable_surveys[0]).await;
             }
             Some(s) => {
@@ -193,7 +201,9 @@ impl Step for MiningExecutor {
                     let market_symbol = captures.name("market").unwrap().as_str();
                     let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                     ship_controller.navigate(market_symbol).await;
-                    ship_controller.sleep_for_navigation().await;
+                    if let Some(cooldown) = ship_controller.navigation_cooldown() {
+                        return Some(cooldown);
+                    }
                     let item = ship_controller.ship.cargo.inventory[0].clone();
                     ship_controller.sell(&item.symbol, item.units).await;
                 } else {

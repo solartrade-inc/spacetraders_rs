@@ -69,6 +69,9 @@ impl Runtime {
         self.try_dequeue().await;
 
         loop {
+            let next_prequeue_instant = (self.prequeue.read().await.peek())
+                .map(|(_, instant)| *instant)
+                .unwrap_or(Instant::now() + Duration::from_secs(3600));
             tokio::select! {
                 Some(idx) = rx.recv() => {
                     let item = self.items[idx].clone();
@@ -101,6 +104,9 @@ impl Runtime {
                             error!("Join error in step: {:?}", e);
                         }
                     }
+                    self.try_dequeue().await;
+                },
+                _ = tokio::time::sleep_until(next_prequeue_instant) => {
                     self.try_dequeue().await;
                 },
                 else => break,

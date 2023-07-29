@@ -100,28 +100,43 @@ pub struct ShipController {
 }
 
 impl ShipController {
+    pub fn navigation_cooldown(&mut self) -> Option<Duration> {
+        if let Some(cooldown) = &self.ship.cooldown {
+            // OutOfRangeError on negative duration
+            if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
+                return Some(duration);
+            }
+        }
+        None
+    }
+
+    pub fn reactor_cooldown(&mut self) -> Option<Duration> {
+        if let Some(cooldown) = &self.ship.cooldown {
+            // OutOfRangeError on negative duration
+            if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
+                return Some(duration);
+            }
+        }
+        None
+    }
+
     pub async fn sleep_for_navigation(&mut self) {
-        // OutOfRangeError on negative duration
-        if let Ok(duration) = (self.ship.nav.route.arrival - Utc::now()).to_std() {
+        if let Some(cooldown) = self.navigation_cooldown() {
             debug!(
-                "Sleeping for navigation {}s",
-                duration.as_millis() as f64 / 1000.0
+                "Sleeping for navigation cooldown {}s",
+                cooldown.as_millis() as f64 / 1000.0
             );
-            tokio::time::sleep(duration).await;
-            // update ship nav?
+            sleep(cooldown).await;
         }
     }
 
     pub async fn sleep_for_cooldown(&mut self) {
-        if let Some(cooldown) = &self.ship.cooldown {
-            // OutOfRangeError on negative duration
-            if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
-                debug!(
-                    "Sleeping for cooldown {}s",
-                    duration.as_millis() as f64 / 1000.0
-                );
-                tokio::time::sleep(duration).await;
-            }
+        if let Some(cooldown) = self.reactor_cooldown() {
+            debug!(
+                "Sleeping for reactor cooldown {}s",
+                cooldown.as_millis() as f64 / 1000.0
+            );
+            sleep(cooldown).await;
         }
     }
 
