@@ -17,8 +17,11 @@ async fn main() {
     // refetch ships: todo load from postgres instead
     controller.fetch_ships(1, 20).await;
 
-    let mut runtime = Runtime::new();
+    let mut runtime = Runtime::new(5);
     for ship in &CONFIG.ships {
+        if !controller.ships.contains_key(&ship.symbol) {
+            continue;
+        }
         if let ShipScript::Mining(mining_config) = &ship.script {
             let mining_controller =
                 MiningController::new(&controller, &ship.symbol, &mining_config.asteroid_symbol);

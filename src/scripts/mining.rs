@@ -171,18 +171,16 @@ impl Step for MiningExecutor {
         match &successor.as_deref() {
             Some("survey") => {
                 let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
-                debug!("Navigating to asteroid...");
                 ship_controller.navigate(&self.asteroid_symbol).await;
-                debug!("Sleeping for navigation...");
                 ship_controller.sleep_for_navigation().await;
-                debug!("Surveying...");
+                ship_controller.sleep_for_cooldown().await;
                 ship_controller.survey().await;
-                debug!("Surveying done.");
             }
             Some("extract_survey_x") => {
                 let mut ship_controller = self.par.ship_controller(&self.ship_symbol).await;
                 ship_controller.navigate(&self.asteroid_symbol).await;
                 ship_controller.sleep_for_navigation().await;
+                ship_controller.sleep_for_cooldown().await;
                 ship_controller.extract_survey(&usable_surveys[0]).await;
             }
             Some(s) => {
@@ -229,7 +227,7 @@ impl MiningController {
         let ship = self.ship_arc.read().await;
 
         // 1. load asteroid
-        let ship_system = ship.nav.system_symbol.clone();
+        let ship_system = util::system_symbol(&self.asteroid_symbol);
         // @@ should read systems and waypoints from memory, not from api
         let waypoints = self
             .par

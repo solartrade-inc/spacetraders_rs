@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 
 use futures::StreamExt as _;
+use log::{debug, error};
 ///
 /// Runtime is a simple runtime for executing steps repeatedly in parallel
 /// We get control over the concurrency and the priority of each step
@@ -16,13 +17,17 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use tokio::{
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    time::Instant,
+};
 
 pub struct Runtime {
-    items: Vec<Arc<Mutex<RunTimeItem>>>,
+    items: Vec<Arc<Mutex<RuntimeItem>>>,
     concurrency: i64,
+    prequeue: RwLock<PriorityQueue<(usize, i64), Instant>>,
     queue: RwLock<PriorityQueue<usize, i64>>,
 
     num_running: AtomicI64,
@@ -30,18 +35,19 @@ pub struct Runtime {
     recv: Mutex<UnboundedReceiver<usize>>,
 }
 
-struct RunTimeItem {
+struct RuntimeItem {
     step: Box<dyn Step + Send + Sync>,
     priority: i64,
 }
 
 impl Runtime {
-    pub fn new() -> Self {
+    pub fn new(concurrency: i64) -> Self {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         Self {
             items: vec![],
-            concurrency: 5,
+            concurrency,
+            prequeue: RwLock::new(PriorityQueue::new()),
             queue: RwLock::new(PriorityQueue::new()),
             num_running: AtomicI64::new(0),
             sender: tx,
@@ -52,7 +58,7 @@ impl Runtime {
     pub async fn add(&mut self, step: Box<dyn Step + Send + Sync>, priority: i64) {
         let idx = self.items.len();
         self.items
-            .push(Arc::new(Mutex::new(RunTimeItem { step, priority })));
+            .push(Arc::new(Mutex::new(RuntimeItem { step, priority })));
         self.queue.write().await.push(idx, priority);
     }
 
@@ -66,27 +72,33 @@ impl Runtime {
             tokio::select! {
                 Some(idx) = rx.recv() => {
                     let item = self.items[idx].clone();
-                    let refresh = async move {
+                    let run_step = async move {
+                        let start = Instant::now();
                         let ret = item.lock().await.step.step().await;
+                        let end = Instant::now();
+                        debug!("Step {} took {}ms", idx, (end - start).as_millis());
                         (idx, ret)
                     };
                     let fut = async move {
-                        let join_result = tokio::spawn(refresh).await;
+                        let join_result = tokio::spawn(run_step).await;
                         (idx, join_result)
                     };
                     futures.push(fut);
                 },
                 Some((_idx, join_result)) = futures.next() => {
-                    log::debug!("{:?}", join_result);
+                    // log::debug!("{:?}", join_result);
                     self.num_running.fetch_add(-1, Ordering::SeqCst);
                     match join_result {
                         Ok(result) => {
                             let (idx, ret) = result;
                             if let Some(duration) = ret {
-                                self.queue.write().await.push(idx, duration.as_millis() as i64);
+                                let priority = self.items[idx].lock().await.priority;
+                                let instant = tokio::time::Instant::now() + duration;
+                                self.prequeue.write().await.push((idx, priority), instant);
                             }
                         },
-                        Err(_e) => {
+                        Err(e) => {
+                            error!("Join error in step: {:?}", e);
                         }
                     }
                     self.try_dequeue().await;
@@ -97,6 +109,26 @@ impl Runtime {
     }
 
     async fn try_dequeue(&self) {
+        let mut prequeue = self.prequeue.write().await;
+        let mut queue = self.queue.write().await;
+
+        loop {
+            let mut added = false;
+            let front = prequeue.peek().map(|(idx, instant)| (*idx, *instant));
+            if let Some(((idx, priority), instant)) = front {
+                if instant <= tokio::time::Instant::now() {
+                    prequeue.pop();
+                    queue.push(idx, priority);
+                    added = true;
+                }
+            }
+            if !added {
+                break;
+            }
+        }
+        drop(prequeue);
+        drop(queue);
+
         while self.num_running.load(Ordering::SeqCst) < self.concurrency {
             let front = {
                 let mut queue = self.queue.write().await;

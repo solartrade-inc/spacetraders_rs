@@ -175,7 +175,6 @@ impl ShipController {
 
     pub async fn survey(&mut self) {
         self.orbit_status("IN_ORBIT").await;
-        self.sleep_for_cooldown().await;
 
         let (surveys, cooldown) = self.par.api_client.survey(&self.ship.symbol).await;
         self.ship.cooldown = Some(cooldown);
@@ -190,8 +189,6 @@ impl ShipController {
     }
 
     pub async fn extract_survey(&mut self, survey: &WrappedSurvey) {
-        self.sleep_for_cooldown().await;
-
         let extract_result = self
             .par
             .api_client

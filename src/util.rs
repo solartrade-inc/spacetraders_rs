@@ -16,6 +16,11 @@ pub fn system_symbol(waypoint_symbol: &str) -> String {
         .join("-")
 }
 
+pub fn ship_symbol(callsign: &str, id: i32) -> String {
+    // convert id to hex
+    format!("{}-{:X}", callsign, id)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -23,5 +28,13 @@ mod test {
     #[test]
     fn test_system_symbol() {
         assert_eq!(system_symbol("X1-DK53-66197A"), "X1-DK53");
+    }
+
+    #[test]
+    fn test_ship_symbol() {
+        assert_eq!(ship_symbol("CALLSIGN_A", 1), "CALLSIGN_A-1");
+        assert_eq!(ship_symbol("CALLSIGN_A", 10), "CALLSIGN_A-A");
+        assert_eq!(ship_symbol("CALLSIGN_A", 255), "CALLSIGN_A-FF");
+        assert_eq!(ship_symbol("CALLSIGN_A", 256), "CALLSIGN_A-100");
     }
 }
