@@ -12,9 +12,10 @@ pub use models::db_models;
 pub use models::schema;
 pub use models::shipconfig;
 
+pub mod agentconfig;
 pub mod controller;
-pub mod scripts;
 pub mod runtime;
+pub mod scripts;
 
 // tools
 pub mod decision_tree;

@@ -28,7 +28,6 @@ pub struct MiningConfig {
     pub asteroid_symbol: String,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModulesConfig {
     pub install_location: Option<String>,

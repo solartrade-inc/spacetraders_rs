@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::{api_client::ApiClient, shipconfig::AgentConfig};
 use crate::database::DatabaseClient;
 use crate::models::*;
+use crate::{api_client::ApiClient, shipconfig::AgentConfig};
 use chrono::Utc;
 use dashmap::DashMap;
 use log::debug;

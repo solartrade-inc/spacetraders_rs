@@ -1,37 +1,43 @@
+use async_trait::async_trait;
+use futures::future::BoxFuture;
+use futures::stream::FuturesUnordered;
+use futures::FutureExt as _;
+use futures::StreamExt as _;
 ///
 /// Runtime is a simple runtime for executing steps repeatedly in parallel
 /// We get control over the concurrency and the priority of each step
 ///
-
 use priority_queue::PriorityQueue;
-use async_trait::async_trait;
-use std::{time::Duration, sync::{atomic::{AtomicI64, Ordering}, Arc}, pin::Pin};
-use futures::stream::FuturesUnordered;
-use futures::StreamExt as _;
-use futures::FutureExt as _;
-use futures::future::BoxFuture;
 use std::future::Future;
-use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver};
-use tokio::sync::RwLock;
+use std::{
+    pin::Pin,
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
-struct Runtime {    
+pub struct Runtime {
     items: Vec<Arc<Mutex<RunTimeItem>>>,
     concurrency: i64,
     queue: RwLock<PriorityQueue<usize, i64>>,
 
-    num_running: AtomicI64, 
+    num_running: AtomicI64,
     sender: UnboundedSender<usize>,
     recv: Mutex<UnboundedReceiver<usize>>,
 }
 
 struct RunTimeItem {
-    step: Box<dyn Step + Send>,
-    priority: i64,    
+    step: Box<dyn Step + Send + Sync>,
+    priority: i64,
 }
 
 impl Runtime {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         Self {
@@ -44,16 +50,14 @@ impl Runtime {
         }
     }
 
-    async fn add(&mut self, step: Box<dyn Step + Send>, priority: i64) {
+    pub async fn add(&mut self, step: Box<dyn Step + Send + Sync>, priority: i64) {
         let idx = self.items.len();
-        self.items.push(Arc::new(Mutex::new(RunTimeItem {
-            step,
-            priority,
-        })));
+        self.items
+            .push(Arc::new(Mutex::new(RunTimeItem { step, priority })));
         self.queue.write().await.push(idx, priority);
     }
 
-    async fn run(&self) {
+    pub async fn run(&self) {
         let mut rx = self.recv.lock().await;
         let mut futures = FuturesUnordered::new();
 
@@ -111,27 +115,32 @@ impl Runtime {
             }
         }
     }
-
 }
 
 type StepResult = Option<Duration>;
 
 #[async_trait]
-trait Step {
-    async fn step(&mut self) -> StepResult;
+pub trait Step {
+    async fn step(&self) -> StepResult;
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
 
-    struct TestExecutor(i64);
+    struct TestExecutor(Arc<Mutex<i64>>);
+    impl TestExecutor {
+        fn new(x: i64) -> Self {
+            Self(Arc::new(Mutex::new(x)))
+        }
+    }
     #[async_trait]
     impl Step for TestExecutor {
-        async fn step(&mut self) -> StepResult {
-            self.0 -= 1;
-            println!("step: {}", self.0);
-            if self.0 == 0 {
+        async fn step(&self) -> StepResult {
+            let mut x = self.0.lock().await;
+            *x -= 1;
+            println!("step: {}", x);
+            if *x == 0 {
                 None
             } else {
                 Some(Duration::from_secs(0))
@@ -142,8 +151,8 @@ mod test {
     #[tokio::test]
     async fn test() {
         let mut runtime = Runtime::new();
-        runtime.add(Box::new(TestExecutor(3)), 0).await;
-        runtime.add(Box::new(TestExecutor(4)), 0).await;
+        runtime.add(Box::new(TestExecutor::new(3)), 0).await;
+        runtime.add(Box::new(TestExecutor::new(4)), 0).await;
         runtime.run().await;
     }
 }

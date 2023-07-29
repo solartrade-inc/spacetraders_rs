@@ -1,6 +1,8 @@
 use crate::decision_tree::{self, evaluate, Edge, EdgeType, Metric};
 use crate::models::*;
+use crate::runtime::Step;
 use crate::{controller::Controller, util};
+use async_trait::async_trait;
 use core::panic;
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use log::debug;
@@ -9,6 +11,7 @@ use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock as AsyncRwLock;
 
 const EXPECTED_NUM_EXTRACTS: u32 = 10;
@@ -29,12 +32,6 @@ pub struct MiningExecutor {
     pub graph: PreparedGraph,
 }
 impl MiningExecutor {
-    async fn run(&self) {
-        loop {
-            self.step().await;
-        }
-    }
-
     fn judge(&self, survey: &Survey) -> bool {
         use graph_builder::DirectedNeighborsWithValues as _;
 
@@ -114,8 +111,11 @@ impl MiningExecutor {
             _ => panic!(),
         }
     }
+}
 
-    async fn step(&self) {
+#[async_trait]
+impl Step for MiningExecutor {
+    async fn step(&self) -> Option<Duration> {
         // identify mining state
         let ship = self.ship_arc.read().await;
 
@@ -206,6 +206,7 @@ impl MiningExecutor {
                 panic!("Unexpected successor: {:?}", successor);
             }
         };
+        Some(Duration::from_secs(0))
     }
 }
 
@@ -224,7 +225,7 @@ impl MiningController {
         }
     }
 
-    pub async fn run(self) {
+    pub async fn setup(self) -> MiningExecutor {
         let ship = self.ship_arc.read().await;
 
         // 1. load asteroid
@@ -287,7 +288,7 @@ impl MiningController {
             graph: g,
         };
         drop(ship);
-        e.run().await;
+        e
     }
 
     pub fn mining_prep(

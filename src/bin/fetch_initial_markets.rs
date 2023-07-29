@@ -1,6 +1,7 @@
 use dotenvy::dotenv;
 use log::*;
 
+use spacetraders_rs::agentconfig::CONFIG;
 use spacetraders_rs::{controller::Controller, util};
 
 #[tokio::main]
@@ -10,8 +11,7 @@ async fn main() {
     info!("Starting up...");
 
     // load agent (set bearer token)
-    let callsign: String = std::env::var("AGENT_CALLSIGN").expect("AGENT_CALLSIGN must be set");
-    let mut controller = Controller::new(&callsign).load().await;
+    let mut controller = Controller::new(&CONFIG).load().await;
 
     // refetch agent
     let _ = controller.api_client.fetch_agent().await;
@@ -21,7 +21,7 @@ async fn main() {
     controller.fetch_ships(1, 20).await;
 
     // grab our command frigate, and send it to all the marketplaces in the starting system
-    let ship_symbol = format!("{}-{}", callsign, 1);
+    let ship_symbol = format!("{}-{}", CONFIG.callsign, 1);
     let mut ship_controller = controller.ship_controller(&ship_symbol).await;
     ship_controller.flight_mode("CRUISE").await;
     let ship_system = ship_controller.ship.nav.system_symbol.clone();
