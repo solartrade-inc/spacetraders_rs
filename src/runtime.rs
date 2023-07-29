@@ -1,16 +1,15 @@
 use async_trait::async_trait;
-use futures::future::BoxFuture;
+
 use futures::stream::FuturesUnordered;
-use futures::FutureExt as _;
+
 use futures::StreamExt as _;
 ///
 /// Runtime is a simple runtime for executing steps repeatedly in parallel
 /// We get control over the concurrency and the priority of each step
 ///
 use priority_queue::PriorityQueue;
-use std::future::Future;
+
 use std::{
-    pin::Pin,
     sync::{
         atomic::{AtomicI64, Ordering},
         Arc,
@@ -77,7 +76,7 @@ impl Runtime {
                     };
                     futures.push(fut);
                 },
-                Some((idx, join_result)) = futures.next() => {
+                Some((_idx, join_result)) = futures.next() => {
                     log::debug!("{:?}", join_result);
                     self.num_running.fetch_add(-1, Ordering::SeqCst);
                     match join_result {
@@ -87,7 +86,7 @@ impl Runtime {
                                 self.queue.write().await.push(idx, duration.as_millis() as i64);
                             }
                         },
-                        Err(e) => {
+                        Err(_e) => {
                         }
                     }
                     self.try_dequeue().await;
@@ -101,10 +100,10 @@ impl Runtime {
         while self.num_running.load(Ordering::SeqCst) < self.concurrency {
             let front = {
                 let mut queue = self.queue.write().await;
-                let front = queue.pop();
-                front
+
+                queue.pop()
             };
-            if let Some((queue_idx, priority)) = front {
+            if let Some((queue_idx, _priority)) = front {
                 let running_prev = self.num_running.fetch_add(1, Ordering::SeqCst);
                 self.sender.send(queue_idx).unwrap();
                 if running_prev + 1 >= self.concurrency {

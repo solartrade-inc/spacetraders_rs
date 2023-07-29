@@ -28,7 +28,7 @@ impl ApiClient {
         });
         Self {
             inner: client,
-            base_url: base_url,
+            base_url,
             auth_token: None,
         }
     }

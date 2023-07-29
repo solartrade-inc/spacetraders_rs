@@ -3,7 +3,7 @@ use log::*;
 use spacetraders_rs::agentconfig::CONFIG;
 use spacetraders_rs::runtime::Runtime;
 use spacetraders_rs::shipconfig::*;
-use spacetraders_rs::{controller::Controller, scripts::mining::MiningController, util};
+use spacetraders_rs::{controller::Controller, scripts::mining::MiningController};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
