@@ -32,9 +32,9 @@ impl DatabaseClient {
         Self { db: db_pool }
     }
 
-    pub async fn load_agent(&self, callsign: &str) -> (String, Agent) {
+    pub async fn load_agent(&self, callsign: &str) -> Option<(String, Agent)> {
         let mut conn = self.db.get().await.unwrap();
-        let agent: db_models::Agent = agents::table
+        let agent: Option<db_models::Agent> = agents::table
             .select((
                 agents::symbol,
                 agents::bearer_token,
@@ -46,16 +46,18 @@ impl DatabaseClient {
             .first(&mut conn)
             .await
             .optional()
-            .unwrap()
-            .expect("Agent not found");
-        (
-            agent.bearer_token,
-            serde_json::from_value(agent.agent).unwrap(),
-        )
+            .unwrap();
+        agent.map(|agent| {
+            (
+                agent.bearer_token,
+                serde_json::from_value(agent.agent).unwrap(),
+            )
+        })
     }
 
-    pub async fn save_agent(&self, callsign: &str, token: &str, agent: &Value) {
+    pub async fn save_agent(&self, callsign: &str, token: &str, agent: &Agent) {
         let mut conn = self.db.get().await.unwrap();
+        let agent = serde_json::to_value(agent).unwrap();
         diesel::insert_into(agents::table)
             .values((
                 agents::symbol.eq(callsign),

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::database::DatabaseClient;
 use crate::models::*;
@@ -13,15 +13,23 @@ use tokio::{
 };
 
 pub struct ControllerBuilder {
-    callsign: String,
+    config: AgentConfig,
 }
 impl ControllerBuilder {
-    pub async fn load(&self) -> Controller {
+    pub async fn load(self) -> Controller {
         let mut api_client = ApiClient::new();
         let db_client = DatabaseClient::new();
 
         // load agent
-        let (bearer_token, agent) = db_client.load_agent(&self.callsign).await;
+        let agent = db_client.load_agent(&self.config.callsign).await;
+        match &agent {
+            Some((bearer_token, _agent)) => {
+                api_client.set_auth_token(bearer_token.clone());
+            }
+            None => {
+                debug!("Agent not found. Continuing with non-auth controller.");
+            }
+        }
 
         // load surveys
         let surveys_list = db_client.load_surveys(0).await;
@@ -33,15 +41,15 @@ impl ControllerBuilder {
                 .push(Arc::new(survey));
         }
 
+        let agent = agent.map(|(_token, agent)| agent);
         // todo: load ships
-
-        api_client.set_auth_token(bearer_token.clone());
-
         Controller {
             api_client,
             db_client,
-            agent: Arc::new(agent),
+            config: self.config,
+            agent: Arc::new(Mutex::new(agent)),
             ships: Arc::new(DashMap::new()),
+            contracts: Arc::new(Mutex::new(Vec::new())),
             markets: Arc::new(DashMap::new()),
             surveys: Arc::new(surveys),
         }
@@ -53,20 +61,21 @@ pub struct Controller {
     // clients
     pub api_client: ApiClient,
     pub db_client: DatabaseClient,
+    pub config: AgentConfig,
 
     // universe
     // double lock: first lock is for the map, second lock is for the ship
     pub ships: Arc<DashMap<String, Arc<AsyncRwLock<Ship>>>>,
-
+    pub contracts: Arc<Mutex<Vec<Arc<Contract>>>>,
     pub markets: Arc<DashMap<String, Arc<Market>>>,
-    pub agent: Arc<Agent>,
+    pub agent: Arc<Mutex<Option<Agent>>>,
     pub surveys: Arc<DashMap<String, Vec<Arc<WrappedSurvey>>>>,
 }
 
 impl Controller {
     pub fn new(config: &AgentConfig) -> ControllerBuilder {
         ControllerBuilder {
-            callsign: String::from(&config.callsign),
+            config: config.clone(),
         }
     }
 
@@ -80,6 +89,41 @@ impl Controller {
         }
     }
 
+    pub async fn fetch_contracts(&mut self, page: u32, limit: u32) {
+        let contracts: List<Contract> = self.api_client.fetch_contracts(page, limit).await;
+        for contract in contracts.data.into_iter() {
+            self.contracts.lock().unwrap().push(Arc::new(contract));
+        }
+    }
+
+    pub async fn fetch_agent(&self) {
+        let agent = self.api_client.fetch_agent().await;
+        self.agent.lock().unwrap().replace(agent);
+    }
+
+    pub async fn accept_contract(&self, contract_id: &str) {
+        let (agent, contract) = self.api_client.accept_contract(contract_id).await;
+        self.agent.lock().unwrap().replace(agent);
+        let mut contracts = self.contracts.lock().unwrap();
+        let index = contracts
+            .iter()
+            .position(|c| c.id == contract.id)
+            .expect("Contract not found");
+        contracts[index] = Arc::new(contract);
+    }
+
+    pub async fn buy_ship(&self, ship_symbol: &str, waypoint_symbol: &str) {
+        debug!(
+            "Buying ship {} with waypoint {}",
+            ship_symbol, waypoint_symbol
+        );
+        let (agent, ship) = self.api_client.buy_ship(ship_symbol, waypoint_symbol).await;
+        self.agent.lock().unwrap().replace(agent);
+        self.ships
+            .insert(ship.symbol.clone(), Arc::new(AsyncRwLock::new(ship)));
+        debug!("Bought ship {}", ship_symbol);
+    }
+
     pub async fn ship_controller(&self, ship_symbol: &str) -> ShipController {
         let ship_arc = self.ships.get(ship_symbol).unwrap().clone();
         let guard = tokio::time::timeout(Duration::from_secs(5), ship_arc.write_owned())
@@ -90,6 +134,19 @@ impl Controller {
             par: self.clone(),
             ship: guard,
         }
+    }
+
+    // pub async fn register(&self, callsign: &str, faction: &str, email: Option<&str>) {
+    pub async fn register(&mut self) {
+        let callsign = self.config.callsign.clone();
+        let faction = self.config.faction.clone();
+        let email = self.config.email.clone();
+        let (token, agent) = self
+            .api_client
+            .register(&callsign, &faction, email.as_deref())
+            .await;
+        self.db_client.save_agent(&callsign, &token, &agent).await;
+        self.agent.lock().unwrap().replace(agent);
     }
 }
 

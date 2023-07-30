@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     pub callsign: String,
+    pub faction: String,
+    pub email: Option<String>,
     pub ships: Vec<ShipConfig>,
 }
 

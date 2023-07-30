@@ -212,6 +212,43 @@ pub struct MarketTransaction {
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Contract {
+    pub id: String,
+    pub faction_symbol: String,
+    #[serde(rename = "type")]
+    pub _type: String,
+    pub terms: ContractTerms,
+    pub accepted: bool,
+    pub fulfilled: bool,
+    pub deadline_to_accept: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractTerms {
+    pub deadline: DateTime<Utc>,
+    pub payment: ContractPayment,
+    pub deliver: Vec<ContractDeliver>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractPayment {
+    pub on_accepted: i64,
+    pub on_fulfilled: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractDeliver {
+    pub trade_symbol: String,
+    pub destination_symbol: String,
+    pub units_required: i64,
+    pub units_fulfilled: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct ApiError {
     pub message: String,
     pub code: u16,
@@ -234,5 +271,13 @@ mod test {
             serialized,
             r#"{"signature":"X1-JK96-45265A-FE9FBF","symbol":"X1-JK96-45265A","deposits":[{"symbol":"AMMONIA_ICE"},{"symbol":"AMMONIA_ICE"},{"symbol":"AMMONIA_ICE"},{"symbol":"ALUMINUM_ORE"},{"symbol":"SILICON_CRYSTALS"},{"symbol":"AMMONIA_ICE"}],"expiration":"2023-07-22T12:41:45.322Z","size":"SMALL"}"#
         );
+    }
+
+    #[test]
+    fn test_contract_deserialize() {
+        let data = r#"{"data":[{"id":"clkpdxc0c3i6gs60cofa7jor6","factionSymbol":"UNITED","type":"PROCUREMENT","terms":{"deadline":"2023-08-06T11:55:37.335Z","payment":{"onAccepted":35670,"onFulfilled":214020},"deliver":[{"tradeSymbol":"COPPER_ORE","destinationSymbol":"X1-HY12-93292Z","unitsRequired":1230,"unitsFulfilled":0}]},"accepted":false,"fulfilled":false,"expiration":"2023-07-31T11:55:37.335Z","deadlineToAccept":"2023-07-31T11:55:37.335Z"}],"meta":{"total":1,"page":1,"limit":20}}"#;
+        let contracts: List<Contract> = serde_json::from_str(&data).unwrap();
+        assert_eq!(contracts.data.len(), 1);
+        assert_eq!(contracts.data[0].id, "clkpdxc0c3i6gs60cofa7jor6");
     }
 }

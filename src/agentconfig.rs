@@ -10,8 +10,12 @@ const UNITED_SHIPYARD: &str = "X1-DK53-66197A";
 lazy_static::lazy_static! {
     pub static ref CONFIG: AgentConfig = {
         let callsign: String = std::env::var("AGENT_CALLSIGN").expect("AGENT_CALLSIGN must be set");
+        let faction: String = std::env::var("AGENT_FACTION").expect("AGENT_FACTION must be set");
+        let email: Option<String> = std::env::var("AGENT_EMAIL").ok();
         let mut config = AgentConfig {
             callsign,
+            faction,
+            email,
             ships: vec![],
         };
         // 20 ships

@@ -187,7 +187,7 @@ mod test {
 
     #[tokio::test]
     async fn test() {
-        let mut runtime = Runtime::new();
+        let mut runtime = Runtime::new(1);
         runtime.add(Box::new(TestExecutor::new(3)), 0).await;
         runtime.add(Box::new(TestExecutor::new(4)), 0).await;
         runtime.run().await;

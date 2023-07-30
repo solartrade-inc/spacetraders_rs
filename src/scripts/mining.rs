@@ -3,7 +3,6 @@ use crate::models::*;
 use crate::runtime::Step;
 use crate::{controller::Controller, util};
 use async_trait::async_trait;
-use core::panic;
 use graph_builder::{DirectedCsrGraph, GraphBuilder};
 use log::debug;
 use rand::prelude::*;

@@ -85,7 +85,7 @@ impl ApiClient {
         callsign: &str,
         faction: &str,
         email: Option<&str>,
-    ) -> ApiClientResponse {
+    ) -> (String, Agent) {
         let mut payload = json!({
             "faction": faction,
             "symbol": callsign,
@@ -93,7 +93,54 @@ impl ApiClient {
         if let Some(email) = email {
             payload["email"] = json!(email);
         }
-        self.post("/v2/register", payload).await
+        let resp = self.post("/v2/register", payload).await;
+        assert!(
+            resp.status.is_success(),
+            "Failed to register agent: {} {}",
+            resp.status,
+            resp.body
+        );
+        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+        let token = body["data"]["token"].take();
+        let token = token.as_str().unwrap();
+        let agent = serde_json::from_value(body["data"]["agent"].take()).unwrap_or_else(|e| {
+            panic!(
+                "Deserialization error: '{}' while parsing agent\n{}",
+                e, resp.body
+            );
+        });
+        // let agent = &body["data"]["agent"];
+        (token.to_string(), agent)
+    }
+
+    pub async fn buy_ship(&self, ship_type: &str, waypoint_symbol: &str) -> (Agent, Ship) {
+        let uri = format!("/v2/my/ships");
+        let payload = json!({
+            "shipType": ship_type,
+            "waypointSymbol": waypoint_symbol,
+        });
+        let resp = self.post(&uri, payload).await;
+        assert!(
+            resp.status.is_success(),
+            "Failed to buy ship: {} {}",
+            resp.status,
+            resp.body
+        );
+        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+        let ship = serde_json::from_value(body["data"]["ship"].take()).unwrap_or_else(|e| {
+            panic!(
+                "Deserialization error: '{}' while parsing ship\n{}",
+                e, resp.body
+            );
+        });
+        let agent = serde_json::from_value(body["data"]["agent"].take()).unwrap_or_else(|e| {
+            panic!(
+                "Deserialization error: '{}' while parsing agent\n{}",
+                e, resp.body
+            );
+        });
+        // transaction
+        (agent, ship)
     }
 
     pub async fn survey(&self, ship_symbol: &str) -> (Vec<Survey>, ShipCooldown) {
@@ -192,7 +239,7 @@ impl ApiClient {
         }
     }
 
-    pub async fn fetch_agent(&self) {
+    pub async fn fetch_agent(&self) -> Agent {
         let resp = self.get("/v2/my/agent").await;
         assert!(
             resp.status.is_success(),
@@ -200,9 +247,18 @@ impl ApiClient {
             resp.status,
             resp.body
         );
+        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+        let agent: Agent = serde_json::from_value(body["data"].take()).unwrap_or_else(|e| {
+            error!(
+                "Deserialization error: '{}' while parsing agent\n{}",
+                e, resp.body
+            );
+            panic!();
+        });
+        agent
     }
 
-    pub async fn fetch_contracts(&self, page: u32, limit: u32) {
+    pub async fn fetch_contracts(&self, page: u32, limit: u32) -> List<Contract> {
         let resp = self
             .get(&format!("/v2/my/contracts?page={}&limit={}", page, limit))
             .await;
@@ -212,6 +268,14 @@ impl ApiClient {
             resp.status,
             resp.body
         );
+        let contracts: List<Contract> = serde_json::from_str(&resp.body).unwrap_or_else(|e| {
+            error!(
+                "Deserialization error: '{}' while parsing contracts\n{}",
+                e, resp.body
+            );
+            panic!();
+        });
+        contracts
     }
 
     pub async fn fetch_ships(&self, page: u32, limit: u32) -> List<Ship> {
@@ -465,5 +529,33 @@ impl ApiClient {
             panic!();
         });
         market
+    }
+
+    pub async fn accept_contract(&self, contract_id: &str) -> (Agent, Contract) {
+        let uri = format!("/v2/my/contracts/{}/accept", contract_id);
+        let resp = self.post(&uri, "").await;
+        assert!(
+            resp.status.is_success(),
+            "Failed to accept contract: {} {}",
+            resp.status,
+            resp.body
+        );
+        let mut body: Value = serde_json::from_str(&resp.body).unwrap();
+        let agent = serde_json::from_value(body["data"]["agent"].take()).unwrap_or_else(|e| {
+            error!(
+                "Deserialization error: '{}' while parsing agent\n{}",
+                e, resp.body
+            );
+            panic!();
+        });
+        let contract =
+            serde_json::from_value(body["data"]["contract"].take()).unwrap_or_else(|e| {
+                error!(
+                    "Deserialization error: '{}' while parsing contract\n{}",
+                    e, resp.body
+                );
+                panic!();
+            });
+        (agent, contract)
     }
 }
