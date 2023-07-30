@@ -34,13 +34,12 @@ async fn main() {
     // buy ore hound
     if controller.ships.len() == 2 {
         let ship_system = util::system_symbol(&agent.headquarters);
-        // @@ should read systems and waypoints from memory, not from api
         let waypoints = controller
             .api_client
             .fetch_system_waypoints(&ship_system)
             .await;
         let shipyard = waypoints.iter().find(|w| util::is_shipyard(w)).unwrap();
-        // @@ this is bugged because agent_guard is still locked
+        // @@ this is turbo bugged because agent_guard is still locked
         controller
             .buy_ship("SHIP_ORE_HOUND", &shipyard.symbol)
             .await;
