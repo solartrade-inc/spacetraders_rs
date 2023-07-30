@@ -5,8 +5,8 @@ use crate::util;
 // for now: define statically here
 // the code isn't supposed to have gameplay 'data' hardcoded in it, so lets keep it contrained to this file
 
-const UNITED_ASTEROID_FIELD: &str = "X1-DK53-56605A";
-const UNITED_SHIPYARD: &str = "X1-DK53-66197A";
+const UNITED_ASTEROID_FIELD: &str = "X1-HY12-60905F";
+const UNITED_SHIPYARD: &str = "X1-HY12-22347Z";
 lazy_static::lazy_static! {
     pub static ref CONFIG: AgentConfig = {
         let callsign: String = std::env::var("AGENT_CALLSIGN").expect("AGENT_CALLSIGN must be set");

@@ -158,11 +158,9 @@ pub struct ShipController {
 
 impl ShipController {
     pub fn navigation_cooldown(&mut self) -> Option<Duration> {
-        if let Some(cooldown) = &self.ship.cooldown {
-            // OutOfRangeError on negative duration
-            if let Ok(duration) = (cooldown.expiration - Utc::now()).to_std() {
-                return Some(duration);
-            }
+        // OutOfRangeError on negative duration
+        if let Ok(duration) = (self.ship.nav.route.arrival - Utc::now()).to_std() {
+            return Some(duration);
         }
         None
     }

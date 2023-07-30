@@ -8,16 +8,12 @@ use spacetraders_rs::{controller::Controller, util};
 async fn main() {
     dotenv().ok();
     pretty_env_logger::init_timed();
-    info!("Starting up...");
 
-    // load agent (set bearer token)
     let mut controller = Controller::new(&CONFIG).load().await;
 
     // refetch agent
-    let _ = controller.api_client.fetch_agent().await;
-    // refetch contracts
-    let _ = controller.api_client.fetch_contracts(1, 20).await;
-    // refetch ships
+    controller.fetch_agent().await;
+    controller.fetch_contracts(1, 20).await;
     controller.fetch_ships(1, 20).await;
 
     // grab our command frigate, and send it to all the marketplaces in the starting system
@@ -29,14 +25,10 @@ async fn main() {
         .api_client
         .fetch_system_waypoints(&ship_system)
         .await;
-    // let system = client.systems.get(ship.location).unwrap();
-
-    debug!("Waypoints: {:?}", waypoints);
 
     for waypoint in waypoints.iter() {
         if util::is_market(waypoint) {
             debug!("Navigating to {}", waypoint.symbol);
-            let mut ship_controller = controller.ship_controller(&ship_symbol).await;
             ship_controller.navigate(&waypoint.symbol).await;
             ship_controller.sleep_for_navigation().await;
             ship_controller.fetch_market().await;
